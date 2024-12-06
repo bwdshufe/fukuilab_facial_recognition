@@ -1,3 +1,4 @@
+# R related
 # History files
 .Rhistory
 .Rapp.history
@@ -47,3 +48,45 @@ po/*~
 
 # RStudio Connect folder
 rsconnect/
+
+# MATLAB related
+# Windows default autosave extension
+*.asv
+
+# OSX / *nix default autosave extension
+*.m~
+
+# Compiled MEX binaries (all platforms)
+*.mex*
+
+# Packaged app and toolbox files
+*.mlappinstall
+*.mltbx
+
+# Generated helpsearch folders
+helpsearch*/
+
+# Simulink code generation folders
+slprj/
+sccprj/
+
+# Simulink autosave extension
+*.autosave
+
+# Simulink cache files
+*.slxc
+
+# Octave session info
+octave-workspace
+
+# MATLAB Drive
+.MATLABDriveTag
+
+# MATLAB Project
+*.prj
+
+# Code generation folders
+codegen/
+
+# MATLAB Online working folder
+*.cloud

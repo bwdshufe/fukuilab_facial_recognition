@@ -33,7 +33,7 @@ tsvsyori_bwd_02.m will copy "Name Metrics.tsv" and rename to "ID.csv" in /Metric
 pfsave_bwd_02.m
 処理した図はMatlab\Metrics\raw\psychometric_functionに保存する
 データはMetrics/raw/psychometric_raw.csvに保存
-存在しないIDをスキップする機能と
+#存在しないIDをスキップする機能と
 既に存在したもスキップする機能を追加した20241206
 
 

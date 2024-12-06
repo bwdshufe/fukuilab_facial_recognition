@@ -27,15 +27,13 @@ Excelの形は以下のように
 <img width="387" alt="image" src="https://github.com/user-attachments/assets/7bdea184-653c-472d-9910-77fe11d8cab6">
 
 
+##
 tsvsyori_bwd_02.m will copy "Name Metrics.tsv" and rename to "ID.csv" in /Metrics/MetricsCsv
-#存在しないIDはスキップできない
+存在しないIDはスキップできない
 
+##
 pfsave_bwd_02.m
-処理した図はMatlab\Metrics\raw\psychometric_functionに保存する
-データはMetrics/raw/psychometric_raw.csvに保存
-#存在しないIDをスキップする機能と
-既に存在したもスキップする機能を追加した20241206
-
-
+処理した図はMatlab\Metrics\raw\psychometric_functionに保存する.データはMetrics/raw/psychometric_raw.csvに保存.
+存在しないIDをスキップする機能と既に存在したもスキップする機能を追加した20241206
 
 ## R guidence

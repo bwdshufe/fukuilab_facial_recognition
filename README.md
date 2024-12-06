@@ -17,6 +17,9 @@ Please ensure your folder structure matches:
 
 put source.xlsx into /MatlabCode
 put all "Name Metrics.tsv" into /Metrics/MetricsRaw
+Excelの形は以下のように
+<img width="232" alt="image" src="https://github.com/user-attachments/assets/6e11b5d1-5216-4baa-a040-0056246a1919">
+
 
 #それぞれのスクリプトを実行する前に，start_id と end_idを変更したことをチェックする
 

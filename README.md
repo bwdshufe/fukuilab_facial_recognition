@@ -8,6 +8,7 @@ To use this code:
 2. Make sure psignifit is in your MATLAB path
 
 ## 実行中の警告は無視すればいい
+## 新たなデータを処理する前に，元のファイルをrenameする
 
 ## MATLAB guidence
 Please ensure your folder structure matches:
@@ -40,5 +41,6 @@ input 1 or 2
 1は図とデータ　2はデータのみ(もっと速い)
 処理した図はMatlab\Metrics\raw\psychometric_functionに保存する.データはMetrics/raw/psychometric_raw.csvに保存.
 存在しないIDをスキップする機能と既に存在したもスキップする機能を追加した20241206
+理由がわからないけど，psychometric_raw.csvに直接追加できない，renameした方がいい
 
 ## R guidence

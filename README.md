@@ -24,8 +24,11 @@ Excelの形は以下のように
 #それぞれのスクリプトを実行する前に，start_id と end_idを変更したことをチェックする
 
 実行する時必ずMATLABのpathは以下になる
-<img width="387" alt="image" src="https://github.com/user-attachments/assets/7bdea184-653c-472d-9910-77fe11d8cab6">
+<img width="392" alt="image" src="https://github.com/user-attachments/assets/d2f70bf6-72c7-40db-a4e4-964c82431f75">
 
+注意！！！全部の三つのパスを追加したを確認する！！！
+<img width="387" alt="image" src="https://github.com/user-attachments/assets/7bdea184-653c-472d-9910-77fe11d8cab6">
+このようのなると，一部のExcelの書くはできない
 
 ##
 tsvsyori_bwd_02.m will copy "Name Metrics.tsv" and rename to "ID.csv" in /Metrics/MetricsCsv

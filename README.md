@@ -44,6 +44,9 @@ input 1 or 2
 理由がわからないけど，psychometric_raw.csvに直接追加できない，renameした方がいい
 
 ##
+eachOutlier_mean_3sd_bwd_02.m
+
+##
 pf_mean_3sd_bwd_02.m
 
 ##

@@ -48,6 +48,7 @@ eachOutlier_mean_3sd_bwd_02.m
 
 ##
 pf_mean_3sd_bwd_02.m
+最終的には，こっちの結果を使われる
 
 ##
 Threshold_plot

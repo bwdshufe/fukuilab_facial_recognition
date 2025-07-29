@@ -1,0 +1,671 @@
+---
+title: "bunnsekiR_bwd_20250524"
+author: "bian"
+date: "2025-05-24"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{r cars}
+summary(cars)
+```
+
+## Including Plots
+
+You can also embed plots, for example:
+
+```{r pressure, echo=FALSE}
+plot(pressure)
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+
+
+```{r}
+library(readxl)
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+library(cluster)
+source("anovakun_489.txt")
+```
+
+```{r}
+all_data = read.csv("all.csv")
+```
+
+```{r}
+assign("start_id", 1, envir = .GlobalEnv)
+assign("end_id", 100, envir = .GlobalEnv)
+missing_ids <- c()
+missing_ids <- sort(c(missing_ids, 42))#width100
+missing_ids <- sort(c(missing_ids, 20,59,73,83,57,19,55,70,79,92,38))#PI20
+missing_ids <- sort(c(missing_ids, 14))#miss of syou
+missing_ids <- sort(c(missing_ids, 47,50))#RT too long
+missing_ids <- sort(c(missing_ids, 96,31))#width偏差
+missing_ids1 <- missing_ids
+
+# 删除这些ID对应的行
+filtered_all <- all_data[!all_data$No %in% missing_ids1, ]
+```
+
+```{r}
+filtered_all_data <- filtered_all
+
+# 直接使用原数据，只需要确保每个participant都有完整的三个条件
+result_Th <- filtered_all_data[filtered_all_data$condition %in% c("u1", "f", "u2"), ]
+
+# 检查是否有participant缺少某个条件
+participant_condition_count <- table(result_Th$No, result_Th$condition)
+cat("每个participant的条件数量:\n")
+print(participant_condition_count)
+
+# 只保留有完整三个条件的participant
+complete_participants <- names(which(rowSums(participant_condition_count > 0) == 3))
+result_Th <- result_Th[result_Th$No %in% complete_participants, ]
+
+# 检查还剩下多少个No
+cat("剩余的participant数量:", length(unique(result_Th$No)), "\n")
+cat("剩余的participant编号:", sort(unique(result_Th$No)), "\n")
+
+# 按No和condition排序
+result_Th <- result_Th[order(result_Th$No, result_Th$condition), ]
+```
+
+##Threshold*order*condition*gender
+```{r}
+##Threshold*order*condition*gender
+Th <- result_Th %>%
+  select(No, order, gender,condition,Threshold)
+anovakun(Th, "ABsC", long = TRUE,between = c("order", "gender"), within = "condition", dv = "Threshold",eta=TRUE)
+```
+
+##Width*order*condition*gender
+```{r}
+##Threshold*order*condition*gender
+Th <- result_Th %>%
+  select(No, order, gender,condition,Width)
+anovakun(Th, "ABsC", long = TRUE,between = c("order", "gender"), within = "condition", dv = "Width",eta=TRUE)
+```
+##RT_mean*order*condition*gender
+```{r}
+##Threshold*order*condition*gender
+Th <- result_Th %>%
+  select(No, order, gender,condition,RT_mean)
+anovakun(Th, "ABsC", long = TRUE,between = c("order", "gender"), within = "condition", dv = "RT_mean",eta=TRUE)
+```
+```{r}
+write.csv(result_Th, file = "result_Th.csv", row.names = TRUE)
+```
+
+```{r}
+result_new <- result_Th %>%
+  # 按No分组
+  group_by(No) %>%
+  # 将condition相关的列进行透视
+  pivot_wider(
+    names_from = condition,
+    values_from = c(Threshold, Width, Slope, RT_mean),
+    names_sep = "_"
+  ) %>%
+  # 取消分组
+  ungroup() %>%
+  # 添加三个模式判断列
+  mutate(
+    # Threshold模式判断
+    Threshold_pattern = case_when(
+      order == "uf" ~ case_when(
+        Threshold_u1 < Threshold_f & Threshold_f < Threshold_u2 ~ "uu",
+        Threshold_u1 > Threshold_f & Threshold_f < Threshold_u2 ~ "du", 
+        Threshold_u1 > Threshold_f & Threshold_f > Threshold_u2 ~ "dd",
+        Threshold_u1 < Threshold_f & Threshold_f > Threshold_u2 ~ "ud",
+        TRUE ~ "other"
+      ),
+      order == "fu" ~ case_when(
+        Threshold_f < Threshold_u1 & Threshold_u1 < Threshold_u2 ~ "uu",
+        Threshold_f > Threshold_u1 & Threshold_u1 < Threshold_u2 ~ "du",
+        Threshold_f > Threshold_u1 & Threshold_u1 > Threshold_u2 ~ "dd", 
+        Threshold_f < Threshold_u1 & Threshold_u1 > Threshold_u2 ~ "ud",
+        TRUE ~ "other"
+      ),
+      TRUE ~ "unknown_order"
+    ),
+    
+    # Width模式判断
+    Width_pattern = case_when(
+      order == "uf" ~ case_when(
+        Width_u1 < Width_f & Width_f < Width_u2 ~ "uu",
+        Width_u1 > Width_f & Width_f < Width_u2 ~ "du",
+        Width_u1 > Width_f & Width_f > Width_u2 ~ "dd",
+        Width_u1 < Width_f & Width_f > Width_u2 ~ "ud",
+        TRUE ~ "other"
+      ),
+      order == "fu" ~ case_when(
+        Width_f < Width_u1 & Width_u1 < Width_u2 ~ "uu",
+        Width_f > Width_u1 & Width_u1 < Width_u2 ~ "du",
+        Width_f > Width_u1 & Width_u1 > Width_u2 ~ "dd",
+        Width_f < Width_u1 & Width_u1 > Width_u2 ~ "ud",
+        TRUE ~ "other"
+      ),
+      TRUE ~ "unknown_order"
+    ),
+    
+    # RT_mean模式判断  
+    RT_mean_pattern = case_when(
+      order == "uf" ~ case_when(
+        RT_mean_u1 < RT_mean_f & RT_mean_f < RT_mean_u2 ~ "uu",
+        RT_mean_u1 > RT_mean_f & RT_mean_f < RT_mean_u2 ~ "du",
+        RT_mean_u1 > RT_mean_f & RT_mean_f > RT_mean_u2 ~ "dd",
+        RT_mean_u1 < RT_mean_f & RT_mean_f > RT_mean_u2 ~ "ud", 
+        TRUE ~ "other"
+      ),
+      order == "fu" ~ case_when(
+        RT_mean_f < RT_mean_u1 & RT_mean_u1 < RT_mean_u2 ~ "uu",
+        RT_mean_f > RT_mean_u1 & RT_mean_u1 < RT_mean_u2 ~ "du",
+        RT_mean_f > RT_mean_u1 & RT_mean_u1 > RT_mean_u2 ~ "dd",
+        RT_mean_f < RT_mean_u1 & RT_mean_u1 > RT_mean_u2 ~ "ud",
+        TRUE ~ "other"
+      ),
+      TRUE ~ "unknown_order"
+    ),
+    
+    # 添加三个数组列，每个包含两个差值参数
+    # Threshold差值数组 [第一段差值, 第二段差值]
+    Threshold_diffs = case_when(
+      order == "uf" ~ paste0("[", round(Threshold_f - Threshold_u1, 4), ", ", round(Threshold_u2 - Threshold_f, 4), "]"),
+      order == "fu" ~ paste0("[", round(Threshold_u1 - Threshold_f, 4), ", ", round(Threshold_u2 - Threshold_u1, 4), "]"),
+      TRUE ~ "[NA, NA]"
+    ),
+    
+    # Width差值数组 [第一段差值, 第二段差值] 
+    Width_diffs = case_when(
+      order == "uf" ~ paste0("[", round(Width_f - Width_u1, 4), ", ", round(Width_u2 - Width_f, 4), "]"),
+      order == "fu" ~ paste0("[", round(Width_u1 - Width_f, 4), ", ", round(Width_u2 - Width_u1, 4), "]"),
+      TRUE ~ "[NA, NA]"
+    ),
+    
+    # RT_mean差值数组 [第一段差值, 第二段差值]
+    RT_mean_diffs = case_when(
+      order == "uf" ~ paste0("[", round(RT_mean_f - RT_mean_u1, 4), ", ", round(RT_mean_u2 - RT_mean_f, 4), "]"),
+      order == "fu" ~ paste0("[", round(RT_mean_u1 - RT_mean_f, 4), ", ", round(RT_mean_u2 - RT_mean_u1, 4), "]"),
+      TRUE ~ "[NA, NA]"
+    )
+  )
+```
+
+
+```{r}
+# 输出到CSV文件
+write.csv(result_new, "result_Th_reshaped.csv", row.names = FALSE, fileEncoding = "UTF-8")
+print("数据已保存到: result_Th_reshaped.csv")
+```
+
+```{r}
+library(dplyr)
+library(stringr)
+
+Th_diffs <- result_new %>%
+  select(No, AQ, Threshold_diffs,social,attention_switching,	local_attention,	communication,	imagination,Friendship,PI20) %>%
+  mutate(
+    # 移除方括号并按逗号分割
+    Threshold_diff1 = as.numeric(str_extract(Threshold_diffs, "(?<=\\[)[^,]+")),
+    Threshold_diff2 = as.numeric(str_extract(Threshold_diffs, "(?<=,\\s)[^\\]]+"))
+  ) %>%
+  select(No, AQ, Threshold_diff1, Threshold_diff2,social,attention_switching,	local_attention,	communication,	imagination,Friendship,PI20)
+
+cor.test(Th_diffs$AQ,Th_diffs$Threshold_diff1)
+cor.test(Th_diffs$AQ,Th_diffs$Threshold_diff2)
+cor.test(Th_diffs$social,Th_diffs$Threshold_diff1)
+cor.test(Th_diffs$social,Th_diffs$Threshold_diff2)
+cor.test(Th_diffs$attention_switching,Th_diffs$Threshold_diff1)
+cor.test(Th_diffs$attention_switching,Th_diffs$Threshold_diff2)
+cor.test(Th_diffs$local_attention,Th_diffs$Threshold_diff1)
+cor.test(Th_diffs$local_attention,Th_diffs$Threshold_diff2)
+cor.test(Th_diffs$communication,Th_diffs$Threshold_diff1)
+cor.test(Th_diffs$communication,Th_diffs$Threshold_diff2)
+cor.test(Th_diffs$imagination,Th_diffs$Threshold_diff1)
+cor.test(Th_diffs$imagination,Th_diffs$Threshold_diff2)
+cor.test(Th_diffs$Friendship,Th_diffs$Threshold_diff1)
+cor.test(Th_diffs$Friendship,Th_diffs$Threshold_diff2)
+cor.test(Th_diffs$PI20,Th_diffs$Threshold_diff1)
+cor.test(Th_diffs$PI20,Th_diffs$Threshold_diff2)
+```
+
+
+```{r}
+# 方法1：使用split()函数
+groups <- split(result_new, list(result_Th$gender, result_Th$order))
+
+# 提取各组数据
+f_uf <- groups$f.uf
+f_fu <- groups$f.fu
+m_uf <- groups$m.uf
+m_fu <- groups$m.fu
+```
+
+
+```{r}
+library(dplyr)
+library(stringr)
+
+Th_diffs <- m_fu %>%
+  select(No, AQ, Threshold_diffs,social,attention_switching,	local_attention,	communication,	imagination,Friendship,PI20) %>%
+  mutate(
+    # 移除方括号并按逗号分割
+    Threshold_diff1 = as.numeric(str_extract(Threshold_diffs, "(?<=\\[)[^,]+")),
+    Threshold_diff2 = as.numeric(str_extract(Threshold_diffs, "(?<=,\\s)[^\\]]+"))
+  ) %>%
+  select(No, AQ, Threshold_diff1, Threshold_diff2,social,attention_switching,	local_attention,	communication,	imagination,Friendship,PI20)
+
+cor.test(Th_diffs$AQ,Th_diffs$Threshold_diff1)
+cor.test(Th_diffs$AQ,Th_diffs$Threshold_diff2)
+cor.test(Th_diffs$social,Th_diffs$Threshold_diff1)
+cor.test(Th_diffs$social,Th_diffs$Threshold_diff2)
+cor.test(Th_diffs$attention_switching,Th_diffs$Threshold_diff1)
+cor.test(Th_diffs$attention_switching,Th_diffs$Threshold_diff2)
+cor.test(Th_diffs$local_attention,Th_diffs$Threshold_diff1)
+cor.test(Th_diffs$local_attention,Th_diffs$Threshold_diff2)
+cor.test(Th_diffs$communication,Th_diffs$Threshold_diff1)
+cor.test(Th_diffs$communication,Th_diffs$Threshold_diff2)
+cor.test(Th_diffs$imagination,Th_diffs$Threshold_diff1)
+cor.test(Th_diffs$imagination,Th_diffs$Threshold_diff2)
+cor.test(Th_diffs$Friendship,Th_diffs$Threshold_diff1)
+cor.test(Th_diffs$Friendship,Th_diffs$Threshold_diff2)
+cor.test(Th_diffs$PI20,Th_diffs$Threshold_diff1)
+cor.test(Th_diffs$PI20,Th_diffs$Threshold_diff2)
+```
+
+
+```{r}
+groups <- split(result_Th, list(result_Th$gender, result_Th$order, result_Th$condition))
+f_uf_f <- groups$f.uf.f
+f_uf_u1 <- groups$f.uf.u1
+f_uf_u2 <- groups$f.uf.u2
+f_fu_f <- groups$f.fu.f
+f_fu_u1 <- groups$f.fu.u1
+f_fu_u2 <- groups$f.fu.u2
+m_uf_f <- groups$m.uf.f
+m_uf_u1 <- groups$m.uf.u1
+m_uf_u2 <- groups$m.uf.u2
+m_fu_f <- groups$m.fu.f
+m_fu_u1 <- groups$m.fu.u1
+m_fu_u2 <- groups$m.fu.u2
+```
+
+```{r}
+# 构建相关性分析函数
+correlation_analysis <- function(data_list, dependent_var, independent_var) {
+  # 检查输入参数
+  if (!is.list(data_list)) {
+    stop("data_list must be a list")
+  }
+  
+  # 存储结果
+  results <- list()
+  correlations <- numeric(length(data_list))
+  p_values <- numeric(length(data_list))
+  group_names <- names(data_list)
+  
+  # 对每组数据进行相关性分析
+  for (i in 1:length(data_list)) {
+    group_data <- data_list[[i]]
+    group_name <- group_names[i]
+    
+    # 检查变量是否存在
+    if (!dependent_var %in% colnames(group_data)) {
+      stop(paste("Dependent variable", dependent_var, "not found in group", group_name))
+    }
+    if (!independent_var %in% colnames(group_data)) {
+      stop(paste("Independent variable", independent_var, "not found in group", group_name))
+    }
+    
+    # 提取变量数据
+    y <- group_data[[dependent_var]]
+    x <- group_data[[independent_var]]
+    
+    # 去除缺失值
+    complete_cases <- complete.cases(x, y)
+    x_clean <- x[complete_cases]
+    y_clean <- y[complete_cases]
+    
+    # 检查数据长度
+    if (length(x_clean) < 3) {
+      warning(paste("Group", group_name, "has insufficient data points (< 3)"))
+      correlations[i] <- NA
+      p_values[i] <- NA
+      next
+    }
+    
+    # 进行相关性分析
+    cor_test <- cor.test(x_clean, y_clean, method = "pearson")
+    
+    # 存储结果
+    correlations[i] <- cor_test$estimate
+    p_values[i] <- cor_test$p.value
+    
+    # 存储详细结果
+    results[[group_name]] <- list(
+      group = group_name,
+      n = length(x_clean),
+      correlation = cor_test$estimate,
+      p_value = cor_test$p.value,
+      conf_int = cor_test$conf.int,
+      method = cor_test$method
+    )
+  }
+  
+  # Bonferroni校正
+  #p_adjusted <- p.adjust(p_values, method = "bonferroni")
+  p_adjusted <- p.adjust(p_values, method = "fdr")
+  
+  # 创建汇总表
+  summary_table <- data.frame(
+    Group = group_names,
+    N = sapply(results, function(x) ifelse(is.null(x$n), NA, x$n)),
+    Correlation = correlations,
+    P_value = p_values,
+    P_adjusted = p_adjusted,
+    Significant = p_adjusted < 0.05,
+    stringsAsFactors = FALSE
+  )
+  
+  # 添加校正后的显著性到详细结果
+  for (i in 1:length(results)) {
+    if (!is.null(results[[i]])) {
+      results[[i]]$p_adjusted <- p_adjusted[i]
+      results[[i]]$significant <- p_adjusted[i] < 0.05
+    }
+  }
+  
+  # 返回结果
+  return(list(
+    summary = summary_table,
+    detailed_results = results,
+    bonferroni_correction = list(
+      original_alpha = 0.05,
+      adjusted_alpha = 0.05 / length(data_list),
+      number_of_tests = length(data_list)
+    )
+  ))
+}
+
+# 使用示例：
+# 首先创建12组数据的列表
+group_list <- list(
+  f_uf_f = f_uf_f,
+  f_uf_u1 = f_uf_u1,
+  f_uf_u2 = f_uf_u2,
+  f_fu_f = f_fu_f,
+  f_fu_u1 = f_fu_u1,
+  f_fu_u2 = f_fu_u2,
+  m_uf_f = m_uf_f,
+  m_uf_u1 = m_uf_u1,
+  m_uf_u2 = m_uf_u2,
+  m_fu_f = m_fu_f,
+  m_fu_u1 = m_fu_u1,
+  m_fu_u2 = m_fu_u2
+)
+
+# 调用函数进行分析（请替换为实际的列名）
+# 例如：因变量为"score"，自变量为"age"
+results1 <- correlation_analysis(group_list, dependent_var = "Threshold", independent_var = "AQ")
+results2 <- correlation_analysis(group_list, dependent_var = "Width", independent_var = "AQ")
+results3 <- correlation_analysis(group_list, dependent_var = "RT_mean", independent_var = "AQ")
+results4 <- correlation_analysis(group_list, dependent_var = "Threshold", independent_var = "Friendship")
+results5 <- correlation_analysis(group_list, dependent_var = "Width", independent_var = "Friendship")
+results6 <- correlation_analysis(group_list, dependent_var = "RT_mean", independent_var = "Friendship")
+results7 <- correlation_analysis(group_list, dependent_var = "Threshold", independent_var = "PI20")
+results8 <- correlation_analysis(group_list, dependent_var = "Width", independent_var = "PI20")
+results9 <- correlation_analysis(group_list, dependent_var = "RT_mean", independent_var = "PI20")
+# 查看结果
+print(results1$summary)
+print(results2$summary)
+print(results3$summary)
+print(results4$summary)
+print(results5$summary)
+print(results6$summary)
+print(results7$summary)
+print(results8$summary)
+print(results9$summary)
+```
+
+```{r}
+results_t1 <- correlation_analysis(group_list, dependent_var = "Threshold", independent_var = "social")
+results_t2 <- correlation_analysis(group_list, dependent_var = "Threshold", independent_var = "attention_switching")
+results_t3 <- correlation_analysis(group_list, dependent_var = "Threshold", independent_var = "local_attention")
+results_t4 <- correlation_analysis(group_list, dependent_var = "Threshold", independent_var = "communication")
+results_t5 <- correlation_analysis(group_list, dependent_var = "Threshold", independent_var = "imagination")
+print(results_t1$summary)
+print(results_t2$summary)
+print(results_t3$summary)
+print(results_t4$summary)
+print(results_t5$summary)
+```
+```{r}
+results_w1 <- correlation_analysis(group_list, dependent_var = "Width", independent_var = "social")
+results_w2 <- correlation_analysis(group_list, dependent_var = "Width", independent_var = "attention_switching")
+results_w3 <- correlation_analysis(group_list, dependent_var = "Width", independent_var = "local_attention")
+results_w4 <- correlation_analysis(group_list, dependent_var = "Width", independent_var = "communication")
+results_w5 <- correlation_analysis(group_list, dependent_var = "Width", independent_var = "imagination")
+print(results_w1$summary)
+print(results_w2$summary)
+print(results_w3$summary)
+print(results_w4$summary)
+print(results_w5$summary)
+```
+```{r}
+results_r1 <- correlation_analysis(group_list, dependent_var = "RT_mean", independent_var = "social")
+results_r2 <- correlation_analysis(group_list, dependent_var = "RT_mean", independent_var = "attention_switching")
+results_r3 <- correlation_analysis(group_list, dependent_var = "RT_mean", independent_var = "local_attention")
+results_r4 <- correlation_analysis(group_list, dependent_var = "RT_mean", independent_var = "communication")
+results_r5 <- correlation_analysis(group_list, dependent_var = "RT_mean", independent_var = "imagination")
+print(results_r1$summary)
+print(results_r2$summary)
+print(results_r3$summary)
+print(results_r4$summary)
+print(results_r5$summary)
+```
+
+
+```{r}
+write.csv(f_uf_f, file = "f_uf_f.csv", row.names = TRUE)
+write.csv(f_uf_u1, file = "f_uf_u1.csv", row.names = TRUE)
+write.csv(f_uf_u2, file = "f_uf_u2.csv", row.names = TRUE)
+write.csv(f_fu_f, file = "f_fu_f.csv", row.names = TRUE)
+write.csv(f_fu_u1, file = "f_fu_u1.csv", row.names = TRUE)
+write.csv(f_fu_u2, file = "f_fu_u2.csv", row.names = TRUE)
+write.csv(m_uf_f, file = "m_uf_f.csv", row.names = TRUE)
+write.csv(m_uf_u1, file = "m_uf_u1.csv", row.names = TRUE)
+write.csv(m_uf_u2, file = "m_uf_u2.csv", row.names = TRUE)
+write.csv(m_fu_f, file = "m_fu_f.csv", row.names = TRUE)
+write.csv(m_fu_u1, file = "m_fu_u1.csv", row.names = TRUE)
+write.csv(m_fu_u2, file = "m_fu_u2.csv", row.names = TRUE)
+```
+
+```{r}
+# 加载必要的包
+library(lme4)
+library(lmerTest)
+library(emmeans)
+library(ggplot2)
+library(lattice)
+
+# 如果没有安装这些包，请先安装：
+# install.packages(c("lme4", "lmerTest", "emmeans", "ggplot2", "lattice"))
+
+# 确保数据类型正确
+result_Th$condition <- as.factor(result_Th$condition)
+result_Th$gender <- as.factor(result_Th$gender)
+result_Th$order <- as.factor(result_Th$order)
+result_Th$No <- as.factor(result_Th$No)
+
+# 检查数据结构
+str(result_Th)
+summary(result_Th)
+
+# 1. 基础混合效果模型（包含所有主效应和交互效应）
+model_full <- lmer(Threshold ~ condition * gender * order + 
+                   PI20 + AQ + Friendship + 
+                   (1 | No), 
+                   data = result_Th)
+
+# 查看模型摘要
+summary(model_full)
+
+# 2. 简化模型（基于ANOVA结果，保留显著的交互效应）
+model_reduced <- lmer(Threshold ~ condition + gender + order + 
+                      condition:order + 
+                      PI20 + AQ + Friendship + 
+                      (1 | No), 
+                      data = result_Th)
+
+# 查看简化模型摘要
+summary(model_reduced)
+
+# 3. 模型比较
+anova(model_reduced, model_full)
+
+# 4. 检查模型假设
+# 残差图
+plot(model_reduced)
+
+# 正态性检验
+qqnorm(resid(model_reduced))
+qqline(resid(model_reduced))
+
+# 5. 固定效应的显著性检验
+anova(model_reduced, type = "III")
+
+# 6. 后续比较分析
+# condition的边际均值比较
+emmeans_condition <- emmeans(model_reduced, ~ condition)
+pairs(emmeans_condition, adjust = "tukey")
+
+# condition和order交互效应的简单效应分析
+emmeans_interaction <- emmeans(model_reduced, ~ condition | order)
+pairs(emmeans_interaction, adjust = "tukey")
+
+# 7. 效应量计算
+# 手动计算边际R方和条件R方
+var_fixed <- var(predict(model_reduced, re.form = NA))
+var_total <- var(predict(model_reduced, re.form = NULL))
+var_residual <- var(residuals(model_reduced))
+
+marginal_r2 <- var_fixed / (var_fixed + var_residual)
+conditional_r2 <- var_total / (var_total + var_residual)
+
+cat("边际R² (固定效应):", round(marginal_r2, 3), "\n")
+cat("条件R² (固定+随机效应):", round(conditional_r2, 3), "\n")
+
+# 8. 模型诊断
+# 残差vs拟合值图
+plot(fitted(model_reduced), residuals(model_reduced),
+     xlab = "拟合值", ylab = "残差", 
+     main = "残差vs拟合值图")
+abline(h = 0, col = "red")
+
+# 正态Q-Q图
+qqnorm(residuals(model_reduced), main = "残差正态Q-Q图")
+qqline(residuals(model_reduced), col = "red")
+
+# 9. 结果可视化
+# 主效应图 - condition
+condition_means <- emmeans(model_reduced, ~ condition)
+condition_df <- as.data.frame(condition_means)
+
+ggplot(condition_df, aes(x = condition, y = emmean)) +
+  geom_point(size = 3) +
+  geom_errorbar(aes(ymin = lower.CL, ymax = upper.CL), width = 0.2) +
+  labs(title = "Condition主效应", 
+       x = "Condition", y = "Threshold估计边际均值") +
+  theme_minimal()
+
+# 主效应图 - gender
+gender_means <- emmeans(model_reduced, ~ gender)
+gender_df <- as.data.frame(gender_means)
+
+ggplot(gender_df, aes(x = gender, y = emmean)) +
+  geom_point(size = 3) +
+  geom_errorbar(aes(ymin = lower.CL, ymax = upper.CL), width = 0.2) +
+  labs(title = "Gender主效应", 
+       x = "Gender", y = "Threshold估计边际均值") +
+  theme_minimal()
+
+# 交互效应图
+interaction_means <- emmeans(model_reduced, ~ condition * order)
+interaction_df <- as.data.frame(interaction_means)
+
+ggplot(interaction_df, aes(x = condition, y = emmean, color = order, group = order)) +
+  geom_point(size = 3) +
+  geom_line() +
+  geom_errorbar(aes(ymin = lower.CL, ymax = upper.CL), width = 0.2) +
+  labs(title = "Condition × Order交互效应", 
+       x = "Condition", y = "Threshold估计边际均值", 
+       color = "Order") +
+  theme_minimal()
+
+# 10. 随机效应检验
+# 计算组内相关系数 (ICC)
+var_components <- as.data.frame(VarCorr(model_reduced))
+random_var <- var_components$vcov[1]  # 随机截距方差
+residual_var <- var_components$vcov[2]  # 残差方差
+icc_value <- random_var / (random_var + residual_var)
+cat("组内相关系数 (ICC):", round(icc_value, 3), "\n")
+
+# 11. 模型系数表
+model_summary <- summary(model_reduced)
+coef_table <- model_summary$coefficients
+cat("\n=== 固定效应系数表 ===\n")
+print(round(coef_table, 4))
+
+# 12. 预测值与实际值比较
+result_Th$predicted <- predict(model_reduced)
+result_Th$residuals <- residuals(model_reduced)
+
+# 预测vs实际散点图
+ggplot(result_Th, aes(x = predicted, y = Threshold)) +
+  geom_point(alpha = 0.6) +
+  geom_smooth(method = "lm", se = TRUE) +
+  geom_abline(intercept = 0, slope = 1, color = "red", linetype = "dashed") +
+  labs(title = "预测值 vs 实际值",
+       x = "预测的Threshold值",
+       y = "实际的Threshold值") +
+  theme_minimal()
+
+# 13. 个体水平的随机效应
+ranef_results <- ranef(model_reduced)
+print(ranef_results)
+
+# 14. 保存结果
+# 将模型结果保存到文件
+sink("threshold_model_results.txt")
+cat("=== 混合效果模型分析结果 ===\n\n")
+cat("完整模型结果:\n")
+print(summary(model_full))
+cat("\n简化模型结果:\n")
+print(summary(model_reduced))
+cat("\n模型比较:\n")
+print(anova(model_reduced, model_full))
+cat("\n固定效应ANOVA:\n")
+print(anova(model_reduced, type = "III"))
+sink()
+
+# 输出关键信息
+cat("模型分析完成！\n")
+cat("主要发现：\n")
+cat("1. 检查模型摘要以了解各因子的显著性\n")
+cat("2. 注意随机效应的方差成分\n")
+cat("3. 查看交互效应的简单效应分析\n")
+cat("4. 模型诊断图已生成，请检查假设是否满足\n")
+```
+
+

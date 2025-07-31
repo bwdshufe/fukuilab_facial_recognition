@@ -255,9 +255,9 @@ for param_idx = 1:height(params)
                     % 创建有效数值的掩码（排除NaN值）
                     valid_gaze_mask = ~isnan(gaze_x_values);
                     
-                    % 统计Tag1且Gaze point X >= 960的次数
+                    % 统计Tag1且Gaze point X <= 960的次数
                     tag1_mask = strcmp(trial_data.eye, 'Tag1');
-                    gaze_x_gte960_mask = gaze_x_values >= 960;
+                    gaze_x_gte960_mask = gaze_x_values <= 960;
                     tag1_gaze_x_gt960_count = sum(tag1_mask & gaze_x_gte960_mask & valid_gaze_mask);
                     
                     % 统计Tag3且Gaze point X >= 960的次数
@@ -316,7 +316,7 @@ for param_idx = 1:height(params)
             writetable(result_table, output_filename);
             
             fprintf('被験者 %s (番号: %d) のデータ処理が完了しました。処理試行数: %d\n', name, no, result_count);
-            fprintf('新增统计项目已添加：Tag1_GazeX>=960=%d, Tag3_GazeX>=960=%d, 两者相加=%d\n', ...
+            fprintf('新增统计项目已添加：Tag1_GazeX<=960=%d, Tag3_GazeX<=960=%d, 两者相加=%d\n', ...
                     sum([results{1:result_count, 13}]), sum([results{1:result_count, 14}]), sum([results{1:result_count, 15}]));
         else
             fprintf('被験者 %s (番号: %d) の有効な試行データが見つかりませんでした\n', name, no);

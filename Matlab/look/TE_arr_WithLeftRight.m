@@ -8,7 +8,7 @@
 % ==================== Parameter Settings ====================
 processed_data_dir = 'ProcessedData_Modified/TE/';  % 修改为新的数据目录
 exclude_ids = [14, 19, 20, 31, 38, 42, 47, 50, 55, 57, 59, 70, 73, 79, 83, 92, 96]; % List of IDs to exclude
-accuracy_threshold = 1.5; % accuracy threshold, data above this value will be filtered
+accuracy_threshold = 2; % accuracy threshold, data above this value will be filtered
 output_dir = 'StatisticalResults_Modified/'; % 修改为新的输出目录
 % ==========================================================
 
@@ -35,6 +35,15 @@ all_data = [];
 fprintf('Starting to read %d CSV files...\n', length(csv_files));
 fprintf('Current accuracy threshold setting: %.2f\n', accuracy_threshold);
 fprintf('Exclude ID list: [%s]\n\n', num2str(exclude_ids));
+
+% Function to check if accuracy value is valid
+function is_valid = isValidAccuracy(accuracy, threshold)
+    % Check if accuracy is valid (numeric, not NaN, not empty, and <= threshold)
+    is_valid = false;
+    if isnumeric(accuracy) && ~isempty(accuracy) && ~any(isnan(accuracy)) && accuracy <= threshold
+        is_valid = true;
+    end
+end
 
 % Read all data files
 for file_idx = 1:length(csv_files)
@@ -350,12 +359,3 @@ fprintf('- gaze_x_gte960_ratio: Tag1+Tag3 with Gaze X >= 960 ratio to total fixa
 fprintf('- mean_fixation_count: Mean fixation count for the combination\n');
 fprintf('- recording_count: Number of recordings retained for this combination\n');
 fprintf('===================\n');
-
-% Function to check if accuracy value is valid
-function is_valid = isValidAccuracy(accuracy, threshold)
-    % Check if accuracy is valid (numeric, not NaN, not empty, and <= threshold)
-    is_valid = false;
-    if isnumeric(accuracy) && ~isempty(accuracy) && ~any(isnan(accuracy)) && accuracy <= threshold
-        is_valid = true;
-    end
-end

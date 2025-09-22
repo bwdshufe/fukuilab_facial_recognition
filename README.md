@@ -34,6 +34,9 @@ Excelの形は以下のように
 
 ##
 tsvsyori_bwd_02.m will copy "Name Metrics.tsv" and rename to "ID.csv" in /Metrics/MetricsCsv
+
+creat "ID_each.csv" in /Metrics/eachCsv
+
 存在しないIDはスキップできない
 
 ##

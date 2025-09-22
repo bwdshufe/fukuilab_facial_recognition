@@ -12,8 +12,7 @@ To use this code:
 
 ## MATLAB guidence
 Please ensure your folder structure matches:
-/MatlabCode
-/Metrics
+/Matlab
 /psignifit-master
 
 put source.xlsx into /MatlabCode

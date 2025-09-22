@@ -11,6 +11,7 @@ To use this code:
 ## 新たなデータを処理する前に，元のファイルをrenameする
 
 ## MATLAB guidence
+MyMatlab version:24.1.0.2628055 (R2024a) Update 4
 Please ensure your folder structure matches:
 /Matlab
 /psignifit-master

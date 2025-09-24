@@ -48,7 +48,12 @@ input 1 or 2
 理由がわからないけど，psychometric_raw.csvに直接追加できない，renameした方がいい
 
 ##
-eachOutlier_mean_3sd_bwd_02.m
+eachOutlier_mean_3sd_bwd_03.m
+input 1 or 2
+1は図とデータ　2はデータのみ(もっと速い)
+条件×パーセンテージ組み合わせごとに3SD基準で外れ値除去。
+処理済みデータをMetrics/eachOutlier/stimulus_3sd/に保存。
+サイコメトリック関数フィッティングで閾値・傾き・幅を計算しMetrics/Threshold/stimulus_3sd/Threshold_stimulus_3sd.csvに出力。
 
 ##
 pf_mean_3sd_bwd_02.m

@@ -40,23 +40,23 @@ creat "ID_each.csv" in /Metrics/eachCsv
 存在しないIDはスキップできない
 
 ##
-pfsave_bwd_02.m
-input 1 or 2<br>
-1は図とデータ　2はデータのみ(もっと速い)
-処理した図はMatlab\Metrics\raw\psychometric_functionに保存する.データはMetrics/raw/psychometric_raw.csvに保存.
-存在しないIDをスキップする機能と既に存在したもスキップする機能を追加した20241206
-理由がわからないけど，psychometric_raw.csvに直接追加できない，renameした方がいい
-
-##
-eachOutlier_mean_3sd_bwd_03.m
+pfsave_bwd_02.m<br>
 input 1 or 2
-1は図とデータ　2はデータのみ(もっと速い)
-条件×パーセンテージ組み合わせごとに3SD基準で外れ値除去。
-処理済みデータをMetrics/eachOutlier/stimulus_3sd/に保存。
-サイコメトリック関数フィッティングで閾値・傾き・幅を計算しMetrics/Threshold/stimulus_3sd/Threshold_stimulus_3sd.csvに出力。
+1は図とデータ　2はデータのみ(もっと速い)<br>
+処理した図はMatlab\Metrics\raw\psychometric_functionに保存する.データはMetrics/raw/psychometric_raw.csvに保存.<br>
+存在しないIDをスキップする機能と既に存在したもスキップする機能を追加した20241206<br>
+理由がわからないけど，psychometric_raw.csvに直接追加できない，renameした方がいい<br>
 
 ##
-pf_mean_3sd_bwd_02.m
+eachOutlier_mean_3sd_bwd_03.m<br>
+input 1 or 2
+1は図とデータ　2はデータのみ(もっと速い)<br>
+条件×パーセンテージ組み合わせごとに3SD基準で外れ値除去。<br>
+処理済みデータをMetrics/eachOutlier/stimulus_3sd/に保存。<br>
+サイコメトリック関数フィッティングで閾値・傾き・幅を計算しMetrics/Threshold/stimulus_3sd/Threshold_stimulus_3sd.csvに出力。<br>
+
+##
+pf_mean_3sd_bwd_02.m<br>
 最終的には，こっちの結果を使われる
 
 ##

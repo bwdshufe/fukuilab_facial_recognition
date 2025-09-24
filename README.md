@@ -51,6 +51,7 @@ input 1 or 2
 eachOutlier_mean_3sd_bwd_03.m<br>
 input 1 or 2
 1は図とデータ　2はデータのみ(もっと速い)<br>
+Metrics/eachCsvのそれぞれのIDのcsvファイルを読む<br>
 条件×パーセンテージ組み合わせごとに3SD基準で外れ値除去。<br>
 処理済みデータをMetrics/eachOutlier/stimulus_3sd/に保存。<br>
 サイコメトリック関数フィッティングで閾値・傾き・幅を計算しMetrics/Threshold/stimulus_3sd/Threshold_stimulus_3sd.csvに出力。<br>

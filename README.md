@@ -41,7 +41,7 @@ creat "ID_each.csv" in /Metrics/eachCsv
 
 ##
 pfsave_bwd_02.m
-input 1 or 2
+input 1 or 2<br>
 1は図とデータ　2はデータのみ(もっと速い)
 処理した図はMatlab\Metrics\raw\psychometric_functionに保存する.データはMetrics/raw/psychometric_raw.csvに保存.
 存在しないIDをスキップする機能と既に存在したもスキップする機能を追加した20241206

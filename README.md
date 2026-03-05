@@ -63,6 +63,6 @@ pf_mean_3sd_bwd_02.m<br>
 ## kimera guidence
 LMM/Data Exportにdataを入れます(nameの状態で注意)
 LMMpre_bwd.mを実行して，データを処理します．ProcessedData_Modifiedに処理結果を保存されました．
-summall.mを実行して，ProcessedData_Modified/all_subjects_combined_gaze.csvは最終のcsvです．
+summall.mを実行して，ProcessedData_Modified/all_subjects_combined_gaze.csvは最終のcsvです．(それは実験1と実験2を共通する．)
 ProcessedData_Modifiedのkimeragaze .RmdとkimeraRT.Rmdを実行．
 R/kimera_bwd_20250524.Rmdは心理測定関数に関する分析コード

@@ -1,0 +1,1659 @@
+---
+title: "bunnsekiR_bwd_20250524"
+author: "bian"
+date: "2025-05-24"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{r cars}
+summary(cars)
+```
+
+## Including Plots
+
+You can also embed plots, for example:
+
+```{r pressure, echo=FALSE}
+plot(pressure)
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+
+
+```{r}
+library(readxl)
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+library(cluster)
+source("anovakun_489.txt")
+```
+
+```{r}
+all_data = read.csv("alldata.csv")
+```
+
+```{r}
+assign("start_id", 1, envir = .GlobalEnv)
+assign("end_id", 20, envir = .GlobalEnv)
+missing_ids <- c()
+missing_ids1 <- missing_ids
+
+# 删除这些ID对应的行
+filtered_all <- all_data[!all_data$No %in% missing_ids1, ]
+```
+
+```{r}
+library(tidyverse)
+
+# 假設你的數據框叫 df，包含 No, condition, Threshold, Width, Slope, RT_mean, order
+
+df_long <- filtered_all %>%
+  mutate(
+    intimacy = case_when(
+      condition %in% c("f", "f_kimera") ~ "friend",
+      condition %in% c("u1", "u1_kimera") ~ "stranger"
+    ),
+    face_type = case_when(
+      condition %in% c("f", "u1") ~ "normal",
+      condition %in% c("f_kimera", "u1_kimera") ~ "chimeric"
+    )
+  ) %>%
+  mutate(
+    intimacy = factor(intimacy, levels = c("friend", "stranger")),
+    face_type = factor(face_type, levels = c("normal", "chimeric")),
+    No = factor(No)
+  )
+
+# 確認結構
+df_long %>% 
+  count(intimacy, face_type)
+
+df_long <- df_long %>%
+  rename(friendship = friend)
+```
+
+
+```{r}
+Th <- df_long %>%
+  select(No, intimacy,face_type,Threshold)
+anovakun(Th, "sAB", long = TRUE,within = c("intimacy","face_type"), dv = "Threshold",auto = T,cin = T,peta = T)
+```
+```{r}
+Th <- df_long %>%
+  select(No, order,intimacy,face_type,Threshold)
+anovakun(Th, "AsBC", long = TRUE,between="order",within = c("intimacy","face_type"), dv = "Threshold",auto = T,cin = T,peta = T)
+```
+
+```{r}
+library(tidyverse)
+
+# orderで左右に分けるための新しいデータフレームを作成
+df_plot <- df_long %>%
+  mutate(
+    # orderによってx座標を変更
+    x_pos = case_when(
+      order == "f" & intimacy == "friend" & face_type == "normal" ~ 1,
+      order == "f" & intimacy == "friend" & face_type == "chimeric" ~ 2,
+      order == "f" & intimacy == "stranger" & face_type == "normal" ~ 3,
+      order == "f" & intimacy == "stranger" & face_type == "chimeric" ~ 4,
+      # chimeric firstの場合は順序を逆に
+      order == "f-kimera" & intimacy == "friend" & face_type == "chimeric" ~ 1,
+      order == "f-kimera" & intimacy == "friend" & face_type == "normal" ~ 2,
+      order == "f-kimera" & intimacy == "stranger" & face_type == "chimeric" ~ 3,
+      order == "f-kimera" & intimacy == "stranger" & face_type == "normal" ~ 4
+    ),
+    # ラベル用の変数を作成
+    x_label = case_when(
+      order == "f" & x_pos == 1 ~ "normal",
+      order == "f" & x_pos == 2 ~ "chimeric",
+      order == "f" & x_pos == 3 ~ "normal",
+      order == "f" & x_pos == 4 ~ "chimeric",
+      order == "f-kimera" & x_pos == 1 ~ "chimeric",
+      order == "f-kimera" & x_pos == 2 ~ "normal",
+      order == "f-kimera" & x_pos == 3 ~ "chimeric",
+      order == "f-kimera" & x_pos == 4 ~ "normal"
+    )
+  )
+
+# Cousineau-Moreyの正規化信頼区間のデータを作成
+ci_data <- data.frame(
+  order = c("f", "f", "f", "f", "f-kimera", "f-kimera", "f-kimera", "f-kimera"),
+  intimacy = c("friend", "friend", "stranger", "stranger", "friend", "friend", "stranger", "stranger"),
+  face_type = c("normal", "chimeric", "normal", "chimeric", "normal", "chimeric", "normal", "chimeric"),
+  Mean = c(65.4214, 66.8018, 68.0869, 69.8578, 64.1632, 63.0374, 66.5049, 67.4972),
+  CIN_L = c(62.3019, 64.5867, 64.6997, 65.6072, 60.3500, 59.1010, 62.9618, 62.7285),
+  CIN_U = c(68.5409, 69.0168, 71.4741, 74.1084, 67.9765, 66.9737, 70.0481, 72.2659)
+) %>%
+  mutate(
+    x_pos = case_when(
+      order == "f" & intimacy == "friend" & face_type == "normal" ~ 1,
+      order == "f" & intimacy == "friend" & face_type == "chimeric" ~ 2,
+      order == "f" & intimacy == "stranger" & face_type == "normal" ~ 3,
+      order == "f" & intimacy == "stranger" & face_type == "chimeric" ~ 4,
+      order == "f-kimera" & intimacy == "friend" & face_type == "chimeric" ~ 1,
+      order == "f-kimera" & intimacy == "friend" & face_type == "normal" ~ 2,
+      order == "f-kimera" & intimacy == "stranger" & face_type == "chimeric" ~ 3,
+      order == "f-kimera" & intimacy == "stranger" & face_type == "normal" ~ 4
+    ),
+    x_label = case_when(
+      order == "f" & x_pos == 1 ~ "normal",
+      order == "f" & x_pos == 2 ~ "chimeric",
+      order == "f" & x_pos == 3 ~ "normal",
+      order == "f" & x_pos == 4 ~ "chimeric",
+      order == "f-kimera" & x_pos == 1 ~ "chimeric",
+      order == "f-kimera" & x_pos == 2 ~ "normal",
+      order == "f-kimera" & x_pos == 3 ~ "chimeric",
+      order == "f-kimera" & x_pos == 4 ~ "normal"
+    )
+  )
+
+# ラベル用のデータフレーム
+label_df <- ci_data %>% 
+  distinct(x_pos, x_label, intimacy, order) %>%
+  arrange(order, x_pos)
+
+ggplot() +
+  # 柱状図（灰色）- geom_rectで25から始まる柱を描画
+  geom_rect(data = ci_data,
+            aes(xmin = x_pos - 0.3, xmax = x_pos + 0.3,
+                ymin = 25, ymax = Mean),
+            fill = "gray80") +
+  # 誤差棒（Cousineau-Moreyの正規化信頼区間）
+  geom_errorbar(data = ci_data,
+                aes(x = x_pos,
+                    ymin = CIN_L, 
+                    ymax = CIN_U),
+                width = 0.15) +
+  # 連線（同じIDとorderで4点を連結）
+  geom_line(data = df_plot,
+            aes(x = x_pos,
+                y = Threshold, 
+                group = interaction(No, order),
+                color = order),
+            alpha = 0.5) +
+  # 散布図
+  geom_point(data = df_plot,
+             aes(x = x_pos,
+                 y = Threshold, 
+                 color = order),
+             size = 2, shape = 1, stroke = 1) +
+  # 色設定
+  scale_color_manual(values = c("f" = "#E74C3C",
+                                "f-kimera" = "#3498DB")) +
+  # X軸の設定
+  scale_x_continuous(
+    breaks = c(1, 2, 3, 4),
+    labels = NULL
+  ) +
+  # Y軸を25から100に設定
+  scale_y_continuous(
+    limits = c(25, 100),
+    breaks = seq(25, 100, by = 25),
+    expand = expansion(mult = c(0, 0.05))
+  ) +
+  # orderで左右に分割
+  facet_wrap(~ order, 
+             labeller = labeller(order = c("f" = "normal first",
+                                          "f-kimera" = "chimeric first"))) +
+  labs(x = "", y = "Threshold") +
+  theme_classic() +
+  theme(
+    strip.background = element_blank(),
+    strip.text = element_text(size = 12),
+    legend.position = "none",
+    axis.text.x = element_text(size = 10, margin = margin(t = 5)),
+    plot.margin = margin(5, 5, 40, 5)
+  ) +
+  # X軸のラベルを手動で追加
+  geom_text(data = label_df,
+            aes(x = x_pos, label = x_label),
+            y = 20, size = 3.5, vjust = 1) +
+  geom_text(data = data.frame(
+    order = c("f", "f", "f-kimera", "f-kimera"),
+    x = c(1.5, 3.5, 1.5, 3.5),
+    label = c("friend", "stranger", "friend", "stranger")
+  ), aes(x = x, label = label),
+  y = 15, size = 4, vjust = 1) +
+  coord_cartesian(clip = "off")
+```
+```{r}
+library(tidyverse)
+
+# orderで左右に分けるための新しいデータフレームを作成
+df_plot <- df_long %>%
+  mutate(
+    # x座標を変更（FriendとStrangerの間隔を広げる）
+    x_pos = case_when(
+      order == "f" & intimacy == "friend" & face_type == "normal" ~ 1,
+      order == "f" & intimacy == "friend" & face_type == "chimeric" ~ 2,
+      order == "f" & intimacy == "stranger" & face_type == "normal" ~ 4,  # 3→4に変更
+      order == "f" & intimacy == "stranger" & face_type == "chimeric" ~ 5,  # 4→5に変更
+      order == "f-kimera" & intimacy == "friend" & face_type == "chimeric" ~ 1,
+      order == "f-kimera" & intimacy == "friend" & face_type == "normal" ~ 2,
+      order == "f-kimera" & intimacy == "stranger" & face_type == "chimeric" ~ 4,  # 3→4に変更
+      order == "f-kimera" & intimacy == "stranger" & face_type == "normal" ~ 5  # 4→5に変更
+    ),
+    x_label = case_when(
+      order == "f" & x_pos == 1 ~ "normal",
+      order == "f" & x_pos == 2 ~ "chimeric",
+      order == "f" & x_pos == 4 ~ "normal",
+      order == "f" & x_pos == 5 ~ "chimeric",
+      order == "f-kimera" & x_pos == 1 ~ "chimeric",
+      order == "f-kimera" & x_pos == 2 ~ "normal",
+      order == "f-kimera" & x_pos == 4 ~ "chimeric",
+      order == "f-kimera" & x_pos == 5 ~ "normal"
+    )
+  )
+
+# Cousineau-Moreyの正規化信頼区間のデータを作成
+ci_data <- data.frame(
+  order = c("f", "f", "f", "f", "f-kimera", "f-kimera", "f-kimera", "f-kimera"),
+  intimacy = c("friend", "friend", "stranger", "stranger", "friend", "friend", "stranger", "stranger"),
+  face_type = c("normal", "chimeric", "normal", "chimeric", "normal", "chimeric", "normal", "chimeric"),
+  Mean = c(65.4214, 66.8018, 68.0869, 69.8578, 64.1632, 63.0374, 66.5049, 67.4972),
+  CIN_L = c(62.3019, 64.5867, 64.6997, 65.6072, 60.3500, 59.1010, 62.9618, 62.7285),
+  CIN_U = c(68.5409, 69.0168, 71.4741, 74.1084, 67.9765, 66.9737, 70.0481, 72.2659)
+) %>%
+  mutate(
+    x_pos = case_when(
+      order == "f" & intimacy == "friend" & face_type == "normal" ~ 1,
+      order == "f" & intimacy == "friend" & face_type == "chimeric" ~ 2,
+      order == "f" & intimacy == "stranger" & face_type == "normal" ~ 4,
+      order == "f" & intimacy == "stranger" & face_type == "chimeric" ~ 5,
+      order == "f-kimera" & intimacy == "friend" & face_type == "chimeric" ~ 1,
+      order == "f-kimera" & intimacy == "friend" & face_type == "normal" ~ 2,
+      order == "f-kimera" & intimacy == "stranger" & face_type == "chimeric" ~ 4,
+      order == "f-kimera" & intimacy == "stranger" & face_type == "normal" ~ 5
+    ),
+    x_label = case_when(
+      order == "f" & x_pos == 1 ~ "normal",
+      order == "f" & x_pos == 2 ~ "chimeric",
+      order == "f" & x_pos == 4 ~ "normal",
+      order == "f" & x_pos == 5 ~ "chimeric",
+      order == "f-kimera" & x_pos == 1 ~ "chimeric",
+      order == "f-kimera" & x_pos == 2 ~ "normal",
+      order == "f-kimera" & x_pos == 4 ~ "chimeric",
+      order == "f-kimera" & x_pos == 5 ~ "normal"
+    )
+  )
+
+# ラベル用のデータフレーム
+label_df <- ci_data %>% 
+  distinct(x_pos, x_label, intimacy, order) %>%
+  arrange(order, x_pos)
+
+# APAスタイルのグラフ作成
+ggplot() +
+  # 柱状図（灰色）
+  geom_rect(data = ci_data,
+            aes(xmin = x_pos - 0.3, xmax = x_pos + 0.3,
+                ymin = 25, ymax = Mean),
+            fill = "gray80") +
+  # 誤差棒（Cousineau-Moreyの正規化信頼区間）
+  geom_errorbar(data = ci_data,
+                aes(x = x_pos,
+                    ymin = CIN_L, 
+                    ymax = CIN_U),
+                width = 0.2,
+                linewidth = 0.5) +
+  # 連線
+  geom_line(data = df_plot,
+            aes(x = x_pos,
+                y = Threshold, 
+                group = interaction(No, order),
+                color = order),
+            alpha = 0.4,
+            linewidth = 0.5) +
+  # 散布図
+  geom_point(data = df_plot,
+             aes(x = x_pos,
+                 y = Threshold, 
+                 color = order),
+             size = 2, shape = 1, stroke = 0.8) +
+  # 色設定（カラーブラインドフレンドリーな色）
+  scale_color_manual(values = c("f" = "#D55E00",        # 赤オレンジ
+                                "f-kimera" = "#0072B2")) +  # 青
+  # X軸の設定
+  scale_x_continuous(
+    breaks = c(1, 2, 4, 5),
+    labels = NULL,
+    limits = c(0.5, 5.5)
+  ) +
+  # Y軸を25から100に設定
+  scale_y_continuous(
+    limits = c(25, 100),
+    breaks = seq(25, 100, by = 25),
+    expand = expansion(mult = c(0, 0.05))
+  ) +
+  # orderで左右に分割
+  facet_wrap(~ order, 
+             labeller = labeller(order = c("f" = "Normal First",
+                                          "f-kimera" = "Chimeric First"))) +
+  labs(x = "", y = "Threshold") +
+  theme_classic(base_size = 12) +
+  theme(
+    # APA形式：パネルの背景
+    strip.background = element_rect(fill = "white", color = "black", linewidth = 0.5),
+    strip.text = element_text(size = 12, face = "bold"),
+    
+    # 凡例を非表示
+    legend.position = "none",
+    
+    # 軸テキスト
+    axis.text = element_text(color = "black", size = 11),
+    axis.title.y = element_text(size = 12, face = "bold", margin = margin(r = 10)),
+    
+    # 軸線
+    axis.line = element_line(color = "black", linewidth = 0.5),
+    axis.ticks = element_line(color = "black", linewidth = 0.5),
+    
+    # パネル間隔
+    panel.spacing = unit(1.5, "lines"),
+    
+    # マージン調整
+    plot.margin = margin(10, 10, 50, 10)
+  ) +
+  # X軸のラベルを手動で追加（face_type）
+  geom_text(data = label_df,
+            aes(x = x_pos, label = x_label),
+            y = 20, size = 3.5, vjust = 1) +
+  # X軸のラベルを手動で追加（intimacy）
+  geom_text(data = data.frame(
+    order = c("f", "f", "f-kimera", "f-kimera"),
+    x = c(1.5, 4.5, 1.5, 4.5),
+    label = c("Friend", "Stranger", "Friend", "Stranger")
+  ), aes(x = x, label = label),
+  y = 13, size = 4, vjust = 1, fontface = "bold") +
+  coord_cartesian(clip = "off")
+
+# 保存する場合（APA推奨サイズ）
+# ggsave("figure.png", width = 8, height = 5, dpi = 300)
+```
+
+
+
+
+```{r}
+Th <- df_long %>%
+  select(No, intimacy,face_type,Width)
+anovakun(Th, "sAB", long = TRUE,within = c("intimacy","face_type"), dv = "Width",auto = T,cin = T,peta = T)
+```
+```{r}
+Th <- df_long %>%
+  select(No, order,intimacy,face_type,Width)
+anovakun(Th, "AsBC", long = TRUE,beteween="order",within = c("intimacy","face_type"), dv = "Width",auto = T,cin = T,peta = T)
+```
+```{r}
+# 筛选特定条件的数据
+filtered_data <- df_long %>%
+  filter(order == "f" & face_type == "normal")
+
+# 进行t检定（配对或独立样本取决于您的实验设计）
+# 如果intimacy是被试内变量（配对t检定）：
+t_result <- t.test(Width ~ intimacy, 
+                   data = filtered_data, 
+                   paired = TRUE)
+
+# 如果intimacy是被试间变量（独立样本t检定）：
+# t_result <- t.test(Width ~ intimacy, 
+#                    data = filtered_data, 
+#                    paired = FALSE)
+
+# 查看结果
+print(t_result)
+
+# 如果需要更详细的统计信息
+library(rstatix)
+filtered_data %>%
+  t_test(Width ~ intimacy, paired = TRUE) %>%
+  add_significance()
+```
+
+```{r}
+library(tidyverse)
+
+# orderで左右に分けるための新しいデータフレームを作成
+df_plot <- df_long %>%
+  mutate(
+    # orderによってx座標を変更
+    x_pos = case_when(
+      order == "f" & intimacy == "friend" & face_type == "normal" ~ 1,
+      order == "f" & intimacy == "friend" & face_type == "chimeric" ~ 2,
+      order == "f" & intimacy == "stranger" & face_type == "normal" ~ 3,
+      order == "f" & intimacy == "stranger" & face_type == "chimeric" ~ 4,
+      # chimeric firstの場合は順序を逆に
+      order == "f-kimera" & intimacy == "friend" & face_type == "chimeric" ~ 1,
+      order == "f-kimera" & intimacy == "friend" & face_type == "normal" ~ 2,
+      order == "f-kimera" & intimacy == "stranger" & face_type == "chimeric" ~ 3,
+      order == "f-kimera" & intimacy == "stranger" & face_type == "normal" ~ 4
+    ),
+    # ラベル用の変数を作成
+    x_label = case_when(
+      order == "f" & x_pos == 1 ~ "normal",
+      order == "f" & x_pos == 2 ~ "chimeric",
+      order == "f" & x_pos == 3 ~ "normal",
+      order == "f" & x_pos == 4 ~ "chimeric",
+      order == "f-kimera" & x_pos == 1 ~ "chimeric",
+      order == "f-kimera" & x_pos == 2 ~ "normal",
+      order == "f-kimera" & x_pos == 3 ~ "chimeric",
+      order == "f-kimera" & x_pos == 4 ~ "normal"
+    )
+  )
+
+# Cousineau-Moreyの正規化信頼区間のデータを作成（Width用）
+ci_data <- data.frame(
+  order = c("f", "f", "f", "f", "f-kimera", "f-kimera", "f-kimera", "f-kimera"),
+  intimacy = c("friend", "friend", "stranger", "stranger", "friend", "friend", "stranger", "stranger"),
+  face_type = c("normal", "chimeric", "normal", "chimeric", "normal", "chimeric", "normal", "chimeric"),
+  Mean = c(23.8366, 25.4119, 23.0155, 25.5128, 21.8768, 20.7788, 22.7637, 24.1149),
+  CIN_L = c(19.2809, 18.5026, 15.8832, 16.0669, 18.0175, 15.5107, 15.4118, 18.2669),
+  CIN_U = c(28.3923, 32.3213, 30.1478, 34.9587, 25.7361, 26.0468, 30.1157, 29.9629)
+) %>%
+  mutate(
+    x_pos = case_when(
+      order == "f" & intimacy == "friend" & face_type == "normal" ~ 1,
+      order == "f" & intimacy == "friend" & face_type == "chimeric" ~ 2,
+      order == "f" & intimacy == "stranger" & face_type == "normal" ~ 3,
+      order == "f" & intimacy == "stranger" & face_type == "chimeric" ~ 4,
+      order == "f-kimera" & intimacy == "friend" & face_type == "chimeric" ~ 1,
+      order == "f-kimera" & intimacy == "friend" & face_type == "normal" ~ 2,
+      order == "f-kimera" & intimacy == "stranger" & face_type == "chimeric" ~ 3,
+      order == "f-kimera" & intimacy == "stranger" & face_type == "normal" ~ 4
+    ),
+    x_label = case_when(
+      order == "f" & x_pos == 1 ~ "normal",
+      order == "f" & x_pos == 2 ~ "chimeric",
+      order == "f" & x_pos == 3 ~ "normal",
+      order == "f" & x_pos == 4 ~ "chimeric",
+      order == "f-kimera" & x_pos == 1 ~ "chimeric",
+      order == "f-kimera" & x_pos == 2 ~ "normal",
+      order == "f-kimera" & x_pos == 3 ~ "chimeric",
+      order == "f-kimera" & x_pos == 4 ~ "normal"
+    )
+  )
+
+# ラベル用のデータフレーム
+label_df <- ci_data %>% 
+  distinct(x_pos, x_label, intimacy, order) %>%
+  arrange(order, x_pos)
+
+ggplot() +
+  # 柱状図（灰色）
+  geom_col(data = ci_data,
+           aes(x = x_pos, y = Mean),
+           fill = "gray80", width = 0.6) +
+  # 誤差棒（Cousineau-Moreyの正規化信頼区間）
+  geom_errorbar(data = ci_data,
+                aes(x = x_pos,
+                    ymin = CIN_L, 
+                    ymax = CIN_U),
+                width = 0.15) +
+  # 連線（同じIDとorderで4点を連結）
+  geom_line(data = df_plot,
+            aes(x = x_pos,
+                y = Width, 
+                group = interaction(No, order),
+                color = order),
+            alpha = 0.5) +
+  # 散布図
+  geom_point(data = df_plot,
+             aes(x = x_pos,
+                 y = Width, 
+                 color = order),
+             size = 2, shape = 1, stroke = 1) +
+  # 色設定
+  scale_color_manual(values = c("f" = "#E74C3C",
+                                "f-kimera" = "#3498DB")) +
+  # X軸の設定
+  scale_x_continuous(
+    breaks = c(1, 2, 3, 4),
+    labels = NULL
+  ) +
+  # Y軸を0から100に設定
+  scale_y_continuous(
+    limits = c(0, 75),
+    breaks = seq(0, 75, by = 25),
+    expand = expansion(mult = c(0, 0.05))
+  ) +
+  # orderで左右に分割
+  facet_wrap(~ order, 
+             labeller = labeller(order = c("f" = "normal first",
+                                          "f-kimera" = "chimeric first"))) +
+  labs(x = "", y = "Width") +
+  theme_classic() +
+  theme(
+    strip.background = element_blank(),
+    strip.text = element_text(size = 12),
+    legend.position = "none",
+    axis.text.x = element_text(size = 10, margin = margin(t = 5)),
+    plot.margin = margin(5, 5, 40, 5)
+  ) +
+  # X軸のラベルを手動で追加
+  geom_text(data = label_df,
+            aes(x = x_pos, label = x_label),
+            y = -5, size = 3.5, vjust = 1) +
+  geom_text(data = data.frame(
+    order = c("f", "f", "f-kimera", "f-kimera"),
+    x = c(1.5, 3.5, 1.5, 3.5),
+    label = c("friend", "stranger", "friend", "stranger")
+  ), aes(x = x, label = label),
+  y = -12, size = 4, vjust = 1) +
+  coord_cartesian(clip = "off")
+```
+```{r}
+library(tidyverse)
+
+# orderで左右に分けるための新しいデータフレームを作成
+df_plot <- df_long %>%
+  mutate(
+    # x座標を変更（FriendとStrangerの間隔を広げる）
+    x_pos = case_when(
+      order == "f" & intimacy == "friend" & face_type == "normal" ~ 1,
+      order == "f" & intimacy == "friend" & face_type == "chimeric" ~ 2,
+      order == "f" & intimacy == "stranger" & face_type == "normal" ~ 4,  # 3→4に変更
+      order == "f" & intimacy == "stranger" & face_type == "chimeric" ~ 5,  # 4→5に変更
+      order == "f-kimera" & intimacy == "friend" & face_type == "chimeric" ~ 1,
+      order == "f-kimera" & intimacy == "friend" & face_type == "normal" ~ 2,
+      order == "f-kimera" & intimacy == "stranger" & face_type == "chimeric" ~ 4,  # 3→4に変更
+      order == "f-kimera" & intimacy == "stranger" & face_type == "normal" ~ 5  # 4→5に変更
+    ),
+    x_label = case_when(
+      order == "f" & x_pos == 1 ~ "normal",
+      order == "f" & x_pos == 2 ~ "chimeric",
+      order == "f" & x_pos == 4 ~ "normal",
+      order == "f" & x_pos == 5 ~ "chimeric",
+      order == "f-kimera" & x_pos == 1 ~ "chimeric",
+      order == "f-kimera" & x_pos == 2 ~ "normal",
+      order == "f-kimera" & x_pos == 4 ~ "chimeric",
+      order == "f-kimera" & x_pos == 5 ~ "normal"
+    )
+  )
+
+# Cousineau-Moreyの正規化信頼区間のデータを作成（Width用）
+ci_data <- data.frame(
+  order = c("f", "f", "f", "f", "f-kimera", "f-kimera", "f-kimera", "f-kimera"),
+  intimacy = c("friend", "friend", "stranger", "stranger", "friend", "friend", "stranger", "stranger"),
+  face_type = c("normal", "chimeric", "normal", "chimeric", "normal", "chimeric", "normal", "chimeric"),
+  Mean = c(23.8366, 25.4119, 23.0155, 25.5128, 21.8768, 20.7788, 22.7637, 24.1149),
+  CIN_L = c(19.2809, 18.5026, 15.8832, 16.0669, 18.0175, 15.5107, 15.4118, 18.2669),
+  CIN_U = c(28.3923, 32.3213, 30.1478, 34.9587, 25.7361, 26.0468, 30.1157, 29.9629)
+) %>%
+  mutate(
+    x_pos = case_when(
+      order == "f" & intimacy == "friend" & face_type == "normal" ~ 1,
+      order == "f" & intimacy == "friend" & face_type == "chimeric" ~ 2,
+      order == "f" & intimacy == "stranger" & face_type == "normal" ~ 4,
+      order == "f" & intimacy == "stranger" & face_type == "chimeric" ~ 5,
+      order == "f-kimera" & intimacy == "friend" & face_type == "chimeric" ~ 1,
+      order == "f-kimera" & intimacy == "friend" & face_type == "normal" ~ 2,
+      order == "f-kimera" & intimacy == "stranger" & face_type == "chimeric" ~ 4,
+      order == "f-kimera" & intimacy == "stranger" & face_type == "normal" ~ 5
+    ),
+    x_label = case_when(
+      order == "f" & x_pos == 1 ~ "normal",
+      order == "f" & x_pos == 2 ~ "chimeric",
+      order == "f" & x_pos == 4 ~ "normal",
+      order == "f" & x_pos == 5 ~ "chimeric",
+      order == "f-kimera" & x_pos == 1 ~ "chimeric",
+      order == "f-kimera" & x_pos == 2 ~ "normal",
+      order == "f-kimera" & x_pos == 4 ~ "chimeric",
+      order == "f-kimera" & x_pos == 5 ~ "normal"
+    )
+  )
+
+# ラベル用のデータフレーム
+label_df <- ci_data %>% 
+  distinct(x_pos, x_label, intimacy, order) %>%
+  arrange(order, x_pos)
+
+# APAスタイルのグラフ作成
+ggplot() +
+  # 柱状図（灰色）
+  geom_col(data = ci_data,
+           aes(x = x_pos, y = Mean),
+           fill = "gray80", width = 0.6) +
+  # 誤差棒（Cousineau-Moreyの正規化信頼区間）
+  geom_errorbar(data = ci_data,
+                aes(x = x_pos,
+                    ymin = CIN_L, 
+                    ymax = CIN_U),
+                width = 0.2,
+                linewidth = 0.5) +
+  # 連線
+  geom_line(data = df_plot,
+            aes(x = x_pos,
+                y = Width, 
+                group = interaction(No, order),
+                color = order),
+            alpha = 0.4,
+            linewidth = 0.5) +
+  # 散布図
+  geom_point(data = df_plot,
+             aes(x = x_pos,
+                 y = Width, 
+                 color = order),
+             size = 2, shape = 1, stroke = 0.8) +
+  # 色設定（カラーブラインドフレンドリーな色）
+  scale_color_manual(values = c("f" = "#D55E00",        # 赤オレンジ
+                                "f-kimera" = "#0072B2")) +  # 青
+  # X軸の設定
+  scale_x_continuous(
+    breaks = c(1, 2, 4, 5),
+    labels = NULL,
+    limits = c(0.5, 5.5)
+  ) +
+  # Y軸を0から75に設定
+  scale_y_continuous(
+    limits = c(0, 75),
+    breaks = seq(0, 75, by = 25),
+    expand = expansion(mult = c(0, 0.05))
+  ) +
+  # orderで左右に分割
+  facet_wrap(~ order, 
+             labeller = labeller(order = c("f" = "Normal First",
+                                          "f-kimera" = "Chimeric First"))) +
+  labs(x = "", y = "Width (%)") +
+  theme_classic(base_size = 12) +
+  theme(
+    # APA形式：パネルの背景
+    strip.background = element_rect(fill = "white", color = "black", linewidth = 0.5),
+    strip.text = element_text(size = 12, face = "bold"),
+    
+    # 凡例を非表示
+    legend.position = "none",
+    
+    # 軸テキスト
+    axis.text = element_text(color = "black", size = 11),
+    axis.title.y = element_text(size = 12, face = "bold", margin = margin(r = 10)),
+    
+    # 軸線
+    axis.line = element_line(color = "black", linewidth = 0.5),
+    axis.ticks = element_line(color = "black", linewidth = 0.5),
+    
+    # パネル間隔
+    panel.spacing = unit(1.5, "lines"),
+    
+    # マージン調整
+    plot.margin = margin(10, 10, 50, 10)
+  ) +
+  # X軸のラベルを手動で追加（face_type）
+  geom_text(data = label_df,
+            aes(x = x_pos, label = x_label),
+            y = -5, size = 3.5, vjust = 1) +
+  # X軸のラベルを手動で追加（intimacy）
+  geom_text(data = data.frame(
+    order = c("f", "f", "f-kimera", "f-kimera"),
+    x = c(1.5, 4.5, 1.5, 4.5),
+    label = c("Friend", "Stranger", "Friend", "Stranger")
+  ), aes(x = x, label = label),
+  y = -13, size = 4, vjust = 1, fontface = "bold") +
+  coord_cartesian(clip = "off")
+
+# 保存する場合（APA推奨サイズ）
+# ggsave("width_figure.png", width = 8, height = 5, dpi = 300)
+```
+
+
+```{r}
+df_long %>%
+  filter(face_type == "normal") %>%
+  select(No, intimacy, Width) %>%
+  pivot_wider(names_from = intimacy, values_from = Width) %>%
+  mutate(diff = friend - stranger) %>%
+  summarise(
+    friend_greater = sum(diff > 0),
+    stranger_greater = sum(diff < 0),
+    equal = sum(diff == 0),
+    total = n()
+  )
+```
+
+
+
+```{r}
+# 按条件拆分计算相关
+library(dplyr)
+
+df_long %>%
+  group_by(intimacy, face_type) %>%
+  summarise(
+    r = cor(Threshold, AQ, method = "pearson"),
+    p = cor.test(Threshold, AQ)$p.value,
+    n = n_distinct(No),
+    .groups = "drop"
+  )
+
+
+df_long %>%
+  group_by(intimacy, face_type) %>%
+  summarise(
+    r = cor(Width, AQ, method = "pearson"),
+    p = cor.test(Width, AQ)$p.value,
+    n = n_distinct(No),
+    .groups = "drop"
+  )
+
+df_long %>%
+  group_by(intimacy, face_type) %>%
+  summarise(
+    r = cor(RT_mean, AQ, method = "pearson"),
+    p = cor.test(RT_mean, AQ)$p.value,
+    n = n_distinct(No),
+    .groups = "drop"
+  )
+```
+
+```{r}
+calc_cor_by_condition <- function(df_long, dv, iv) {
+  df_long %>%  # data → df_long に修正
+    group_by(intimacy, face_type) %>%
+    summarise(
+      DV = dv,
+      IV = iv,
+      r = cor(.data[[dv]], .data[[iv]], method = "pearson"),
+      p = cor.test(.data[[dv]], .data[[iv]])$p.value,
+      n = n_distinct(No),
+      .groups = "drop"
+    )
+}
+
+# 批量运行
+dvs <- c("Threshold", "Width", "RT_mean")
+ivs <- c("AQ", "PI20", "friendship")
+
+results <- expand.grid(dv = dvs, iv = ivs, stringsAsFactors = FALSE) %>%
+  purrr::pmap_dfr(~ calc_cor_by_condition(df_long, ..1, ..2))
+
+print(results)
+```
+
+```{r}
+# 因变量
+dvs <- c("Threshold", "Width", "RT_mean")
+
+# AQ五个子项目
+ivs_aq_sub <- c("social", "attention_switching", "local_attention", 
+                "communication", "imagination")
+
+# 批量运行
+results_aq_sub <- expand.grid(dv = dvs, iv = ivs_aq_sub, stringsAsFactors = FALSE) %>%
+  purrr::pmap_dfr(~ calc_cor_by_condition(df_long, ..1, ..2))
+
+# 查看结果
+print(results_aq_sub, n = Inf)
+```
+
+```{r}
+library(dplyr)
+
+# 先聚合为被试水平（每人取平均）
+df_subj <- df_long %>%
+  group_by(No) %>%
+  summarise(
+    Threshold = mean(Threshold),
+    Width = mean(Width),
+    RT_mean = mean(RT_mean),
+    AQ = first(AQ),
+    social = first(social),
+    attention_switching = first(attention_switching),
+    local_attention = first(local_attention),
+    communication = first(communication),
+    imagination = first(imagination),
+    PI20 = first(PI20),
+    friendship = first(friendship),
+    .groups = "drop"
+  )
+
+# ===== 计算相关的函数 =====
+calc_cor <- function(data, dv, iv) {
+  test <- cor.test(data[[dv]], data[[iv]], method = "pearson")
+  tibble(
+    DV = dv,
+    IV = iv,
+    r = test$estimate,
+    p = test$p.value,
+    n = nrow(data)
+  )
+}
+
+# ===== results_overall: AQ, PI20, friend =====
+dvs <- c("Threshold", "Width", "RT_mean")
+ivs <- c("AQ", "PI20", "friendship")
+
+results_overall <- expand.grid(dv = dvs, iv = ivs, stringsAsFactors = FALSE) %>%
+  purrr::pmap_dfr(~ calc_cor(df_subj, ..1, ..2)) %>%
+  mutate(
+    sig = case_when(
+      p < .001 ~ "***",
+      p < .01  ~ "**",
+      p < .05  ~ "*",
+      p < .10  ~ "†",
+      TRUE     ~ ""
+    )
+  )
+
+# ===== results_aq_sub_overall: AQ五个子项目 =====
+ivs_aq_sub <- c("social", "attention_switching", "local_attention", 
+                "communication", "imagination")
+
+results_aq_sub_overall <- expand.grid(dv = dvs, iv = ivs_aq_sub, stringsAsFactors = FALSE) %>%
+  purrr::pmap_dfr(~ calc_cor(df_subj, ..1, ..2)) %>%
+  mutate(
+    sig = case_when(
+      p < .001 ~ "***",
+      p < .01  ~ "**",
+      p < .05  ~ "*",
+      p < .10  ~ "†",
+      TRUE     ~ ""
+    )
+  )
+
+# 查看结果
+print(results_overall)
+print(results_aq_sub_overall)
+
+# 输出CSV
+write.csv(results_overall, "results_overall.csv", row.names = FALSE)
+write.csv(results_aq_sub_overall, "results_aq_sub_overall.csv", row.names = FALSE)
+```
+
+```{r}
+library(tidyverse)
+library(ggplot2)
+
+# =====================================
+# 9张图：每个 DV-IV 组合一张图
+# 每张图4个子图：按 intimacy × face_type 分面
+# =====================================
+
+# 定义变量
+dvs <- c("Threshold", "Width", "RT_mean")
+ivs <- c("AQ", "PI20", "friendship")
+
+# 创建单张图的函数（包含4个条件子图）
+create_faceted_scatter <- function(data, dv, iv) {
+  
+  # 计算每个条件的相关系数
+  cor_labels <- data %>%
+    group_by(intimacy, face_type) %>%
+    summarise(
+      r = cor(.data[[iv]], .data[[dv]], method = "pearson"),
+      p = cor.test(.data[[iv]], .data[[dv]])$p.value,
+      .groups = "drop"
+    ) %>%
+    mutate(
+      label = paste0("r = ", round(r, 3), "\np = ", round(p, 4))
+    )
+  
+  # 获取y轴范围用于放置标签
+  y_max <- max(data[[dv]], na.rm = TRUE)
+  x_min <- min(data[[iv]], na.rm = TRUE)
+  
+  # 绘图
+  ggplot(data, aes(x = .data[[iv]], y = .data[[dv]])) +
+    geom_point(color = "steelblue", alpha = 0.7, size = 2.5) +
+    geom_smooth(method = "lm", se = FALSE, color = "red", linewidth = 1) +
+    geom_text(
+      data = cor_labels,
+      aes(x = x_min, y = y_max, label = label),
+      hjust = 0, vjust = 1, size = 3.5,
+      inherit.aes = FALSE
+    ) +
+    facet_grid(intimacy ~ face_type) +
+    labs(
+      title = paste(iv, "vs", dv),
+      x = iv,
+      y = dv
+    ) +
+    theme_bw(base_size = 11) +
+    theme(
+      plot.title = element_text(hjust = 0.5, face = "bold", size = 14),
+      strip.background = element_rect(fill = "grey90"),
+      strip.text = element_text(face = "bold"),
+      panel.grid.minor = element_blank()
+    )
+}
+
+# =====================================
+# 批量生成9张图
+# =====================================
+generate_all_plots <- function(data) {
+  
+  plot_list <- list()
+  
+  for (dv in dvs) {
+    for (iv in ivs) {
+      plot_name <- paste(iv, "vs", dv, sep = "_")
+      plot_list[[plot_name]] <- create_faceted_scatter(data, dv, iv)
+    }
+  }
+  
+  return(plot_list)
+}
+
+# =====================================
+# 使用方法
+# =====================================
+
+# 生成所有图
+all_plots <- generate_all_plots(df_long)
+
+# 保存所有图
+for (plot_name in names(all_plots)) {
+  ggsave(
+    filename = paste0("cor_", plot_name, ".png"),
+    plot = all_plots[[plot_name]],
+    width = 8, height = 6, dpi = 300
+  )
+  cat("Saved:", plot_name, "\n")
+}
+
+# 或者单独查看某一张
+# print(all_plots[["AQ_vs_Threshold"]])
+```
+```{r}
+library(tidyverse)
+library(ggplot2)
+
+# =====================================
+# 9张图:每个 DV-IV 组合一张图
+# 每张图4个子图:按 intimacy × face_type 分面
+# 每个子图内按 order 分组(蓝线/红线)
+# =====================================
+
+# 定义变量
+dvs <- c("Threshold", "Width", "RT_mean")
+ivs <- c("AQ", "PI20", "friendship")
+
+# 创建单张图的函数(包含4个条件子图,按order分组)
+create_faceted_scatter <- function(data, dv, iv) {
+  
+  # 计算每个条件 × order 的相关系数
+  cor_labels <- data %>%
+    group_by(intimacy, face_type, order) %>%
+    summarise(
+      r = cor(.data[[iv]], .data[[dv]], method = "pearson", use = "complete.obs"),
+      p = cor.test(.data[[iv]], .data[[dv]])$p.value,
+      .groups = "drop"
+    ) %>%
+    mutate(
+      label = paste0(
+        ifelse(order == "f", "f: ", "f-kimera: "),
+        "r = ", sprintf("%.3f", r), 
+        ", p = ", sprintf("%.4f", p)
+      )
+    )
+  
+  # 为每个子图组合标签(f和f-kimera各一行)
+  cor_text <- cor_labels %>%
+    group_by(intimacy, face_type) %>%
+    summarise(
+      combined_label = paste(label, collapse = "\n"),
+      .groups = "drop"
+    )
+  
+  # 获取坐标范围用于放置标签
+  y_max <- max(data[[dv]], na.rm = TRUE)
+  y_min <- min(data[[dv]], na.rm = TRUE)
+  x_min <- min(data[[iv]], na.rm = TRUE)
+  
+  # 绘图
+  ggplot(data, aes(x = .data[[iv]], y = .data[[dv]], color = order, group = order)) +
+    geom_point(alpha = 0.6, size = 2) +
+    geom_smooth(method = "lm", se = FALSE, linewidth = 1) +
+    scale_color_manual(
+      values = c("f" = "blue", "f-kimera" = "red"),
+      labels = c("f" = "f", "f-kimera" = "f-kimera")
+    ) +
+    geom_text(
+      data = cor_text,
+      aes(x = x_min, y = y_max, label = combined_label),
+      hjust = 0, vjust = 1, size = 3,
+      color = "black",
+      inherit.aes = FALSE
+    ) +
+    facet_grid(intimacy ~ face_type) +
+    labs(
+      title = paste(iv, "vs", dv),
+      x = iv,
+      y = dv,
+      color = "Order"
+    ) +
+    theme_bw(base_size = 11) +
+    theme(
+      plot.title = element_text(hjust = 0.5, face = "bold", size = 14),
+      strip.background = element_rect(fill = "grey90"),
+      strip.text = element_text(face = "bold"),
+      panel.grid.minor = element_blank(),
+      legend.position = "bottom"
+    )
+}
+
+# =====================================
+# 批量生成9张图
+# =====================================
+generate_all_plots <- function(data) {
+  
+  plot_list <- list()
+  
+  for (dv in dvs) {
+    for (iv in ivs) {
+      plot_name <- paste(iv, "vs", dv, sep = "_")
+      plot_list[[plot_name]] <- create_faceted_scatter(data, dv, iv)
+    }
+  }
+  
+  return(plot_list)
+}
+
+# =====================================
+# 使用方法
+# =====================================
+
+# 生成所有图
+all_plots <- generate_all_plots(df_long)
+
+# 保存所有图
+for (plot_name in names(all_plots)) {
+  ggsave(
+    filename = paste0("cor_", plot_name, ".png"),
+    plot = all_plots[[plot_name]],
+    width = 10, height = 6, dpi = 300
+  )
+  cat("Saved:", plot_name, "\n")
+}
+
+# 或者单独查看某一张
+# print(all_plots[["AQ_vs_Threshold"]])
+```
+
+```{r}
+library(tidyverse)
+library(ggplot2)
+
+# =====================================
+# 6张图: 每个 DV-IV 组合一张图 (无 RT_mean)
+# APA 格式 + 强制坐标轴线 + 修改标签 + 去除图例
+# =====================================
+
+# 定义变量
+dvs <- c("Threshold", "Width") 
+ivs <- c("AQ", "PI20", "friendship")
+
+# 创建单张图的函数
+create_faceted_scatter <- function(data, dv, iv) {
+  
+  # 1. 计算相关系数并修改标签文字
+  cor_labels <- data %>%
+    group_by(intimacy, face_type, order) %>%
+    summarise(
+      r = cor(.data[[iv]], .data[[dv]], method = "pearson", use = "complete.obs"),
+      p = cor.test(.data[[iv]], .data[[dv]])$p.value,
+      .groups = "drop"
+    ) %>%
+    mutate(
+      # --- 修改点 1: 更改显示的文字标签 ---
+      label = paste0(
+        ifelse(order == "f", "Normal First: ", "Chimeric First: "), # 这里修改名称
+        "r = ", sprintf("%.3f", r), 
+        ", p = ", sprintf("%.4f", p)
+      )
+    )
+  
+  # 2. 组合标签 (保持不变)
+  cor_text <- cor_labels %>%
+    group_by(intimacy, face_type) %>%
+    summarise(
+      combined_label = paste(label, collapse = "\n"),
+      .groups = "drop"
+    )
+  
+  # 3. 获取坐标范围
+  y_max <- max(data[[dv]], na.rm = TRUE)
+  x_min <- min(data[[iv]], na.rm = TRUE)
+  
+  # 4. 绘图
+  ggplot(data, aes(x = .data[[iv]], y = .data[[dv]], color = order, group = order)) +
+    # 点
+    geom_point(alpha = 0.6, size = 2) +
+    
+    # 拟合线
+    geom_smooth(method = "lm", se = FALSE, linewidth = 1) +
+    
+    # 手动添加坐标轴线 (L型)
+    geom_vline(xintercept = -Inf, color = "black", size = 0.5) +
+    geom_hline(yintercept = -Inf, color = "black", size = 0.5) +
+    
+    # 颜色设置 (保持数据对应的颜色，但不需要labels了因为图例要去掉)
+    scale_color_manual(
+      values = c("f" = "blue", "f-kimera" = "red")
+    ) +
+    
+    # 相关系数文字
+    geom_text(
+      data = cor_text,
+      aes(x = x_min, y = y_max, label = combined_label),
+      hjust = 0, vjust = 1, size = 3,
+      color = "black", 
+      lineheight = 1.2,
+      inherit.aes = FALSE
+    ) +
+    
+    # 分面设置
+    facet_grid(intimacy ~ face_type) +
+    
+    # 防止裁剪
+    coord_cartesian(clip = "off") +
+    
+    # 标签
+    labs(
+      title = paste(iv, "vs", dv),
+      x = iv,
+      y = dv
+      # color = "Order" # 这里不需要了，因为图例会被隐藏
+    ) +
+    
+    # --- 主题设置 ---
+    theme_bw(base_size = 12) + 
+    theme(
+      # 去除网格和边框
+      panel.grid = element_blank(),
+      panel.border = element_blank(),
+      axis.line = element_blank(),
+      
+      # 标题样式
+      plot.title = element_text(hjust = 0.5, face = "bold", size = 14),
+      
+      # 分面标签样式
+      strip.background = element_rect(fill = "white", color = "black", size = 0.5),
+      strip.text = element_text(face = "bold", size = 11, color = "black"),
+      
+      # 坐标轴文字
+      axis.text = element_text(color = "black"),
+      
+      # 分面间距
+      panel.spacing = unit(1, "lines"),
+      
+      # --- 修改点 2: 去除图例 ---
+      legend.position = "none" 
+    )
+}
+
+# =====================================
+# 批量生成函数
+# =====================================
+generate_all_plots <- function(data) {
+  plot_list <- list()
+  for (dv in dvs) {
+    for (iv in ivs) {
+      plot_name <- paste(iv, "vs", dv, sep = "_")
+      plot_list[[plot_name]] <- create_faceted_scatter(data, dv, iv)
+    }
+  }
+  return(plot_list)
+}
+
+# =====================================
+# 执行生成与保存
+# =====================================
+
+# 1. 生成所有图
+all_plots <- generate_all_plots(df_long)
+
+# 2. 创建文件夹
+if(!dir.exists("plots_output")) {
+  dir.create("plots_output")
+}
+
+# 3. 循环保存
+for (plot_name in names(all_plots)) {
+  
+  file_path <- paste0("plots_output/", plot_name, ".png")
+  
+  ggsave(
+    filename = file_path,
+    plot = all_plots[[plot_name]],
+    width = 8,      
+    height = 6,     
+    dpi = 300,      
+    units = "in",
+    bg = "white"    
+  )
+  
+  cat("已保存:", file_path, "\n")
+}
+```
+
+```{r}
+u1_normal <- df_long %>%
+  filter(face_type == "normal") %>%
+  filter(intimacy == "stranger") %>%
+  select(No, Threshold, Width, u1_type)
+  
+Th <- u1_normal %>%
+  select(No, u1_type,Threshold)
+anovakun(Th, "As", long = TRUE,between="u1_type", dv = "Threshold",eta=TRUE)
+
+Th <- u1_normal %>%
+  select(No, u1_type,Width)
+anovakun(Th, "As", long = TRUE,between="u1_type", dv = "Width",eta=TRUE)
+```
+```{r}
+library(tidyverse)
+library(ggplot2)
+
+# 基本主題設定（APA格式）
+theme_apa <- theme_classic(base_size = 12) +
+  theme(
+    axis.title = element_text(size = 12),
+    axis.text = element_text(size = 11, color = "black"),
+    axis.line = element_line(color = "black", linewidth = 0.5),
+    axis.ticks = element_line(color = "black"),
+    legend.position = "none",
+    plot.title = element_text(hjust = 0.5, size = 12),
+    panel.grid = element_blank()
+  )
+
+# Threshold 箱線圖
+p_threshold <- ggplot(u1_normal, aes(x = u1_type, y = Threshold)) +
+  geom_boxplot(width = 0.5, outlier.shape = NA, fill = "white", color = "black") +
+  geom_jitter(width = 0.1, alpha = 0.6, size = 2, color = "black") +
+  labs(x = "Group", y = "Threshold (%)") +
+  theme_apa
+
+# Width 箱線圖
+p_width <- ggplot(u1_normal, aes(x = u1_type, y = Width)) +
+  geom_boxplot(width = 0.5, outlier.shape = NA, fill = "white", color = "black") +
+  geom_jitter(width = 0.1, alpha = 0.6, size = 2, color = "black") +
+  labs(x = "Group", y = "Width (%)") +
+  theme_apa
+
+# 顯示圖形
+print(p_threshold)
+print(p_width)
+
+# 儲存圖形（300 dpi，適合投稿）
+ggsave("threshold_boxplot.png", p_threshold, width = 4, height = 4, dpi = 300)
+ggsave("width_boxplot.png", p_width, width = 4, height = 4, dpi = 300)
+```
+```{r}
+library(tidyverse)
+library(ggplot2)
+
+# =====================================
+# 6张图: 每个 DV-IV 组合一张图 (无 order 考虑)
+# APA 格式 + 强制坐标轴线 + Arial 字体 + 放大文字 + 无标题
+# =====================================
+
+# 定义变量
+dvs <- c("Threshold", "Width") 
+ivs <- c("AQ", "PI20", "friendship")
+
+# 创建单张图的函数
+create_faceted_scatter <- function(data, dv, iv) {
+  
+  # 1. 计算相关系数（不考虑order）
+  cor_labels <- data %>%
+    group_by(intimacy, face_type) %>%
+    summarise(
+      r = cor(.data[[iv]], .data[[dv]], method = "pearson", use = "complete.obs"),
+      p = cor.test(.data[[iv]], .data[[dv]])$p.value,
+      .groups = "drop"
+    ) %>%
+    mutate(
+      label = paste0("r = ", sprintf("%.3f", r), ", p = ", sprintf("%.4f", p))
+    )
+  
+  # 2. 获取坐标范围（用于放置文字）
+  y_max <- max(data[[dv]], na.rm = TRUE)
+  x_min <- min(data[[iv]], na.rm = TRUE)
+  
+  # 3. 绘图
+  ggplot(data, aes(x = .data[[iv]], y = .data[[dv]])) +
+    # 点
+    geom_point(alpha = 0.6, size = 2, color = "black") +
+    
+    # 拟合线
+    geom_smooth(method = "lm", se = FALSE, linewidth = 1, color = "blue") +
+    
+    # 手动添加坐标轴线 (L型)
+    geom_vline(xintercept = -Inf, color = "black", size = 0.5) +
+    geom_hline(yintercept = -Inf, color = "black", size = 0.5) +
+    
+    # 相关系数文字 - 放大字体
+    geom_text(
+      data = cor_labels,
+      aes(x = x_min, y = y_max, label = label),
+      hjust = 0, vjust = 1, size = 7,  # 从 3.5 增加到 5
+      color = "black",
+      family = "Arial",
+      inherit.aes = FALSE
+    ) +
+    
+    # 分面设置
+    facet_grid(intimacy ~ face_type) +
+    
+    # 防止裁剪
+    coord_cartesian(clip = "off") +
+    
+    # 标签 - 去除标题
+    labs(
+      x = iv,
+      y = dv
+    ) +
+    
+    # --- 主题设置 ---
+    theme_bw(base_size = 15, base_family = "Arial") +  # 从 12 增加到 14
+    theme(
+      # 去除网格和边框
+      panel.grid = element_blank(),
+      panel.border = element_blank(),
+      axis.line = element_blank(),
+      
+      # 分面标签样式 - 放大字体
+      strip.background = element_rect(fill = "white", color = "black", size = 0.5),
+      strip.text = element_text(face = "bold", size = 13, color = "black", family = "Arial"),  # 从 11 增加到 13
+      
+      # 坐标轴文字 - 放大字体
+      axis.text = element_text(color = "black", family = "Arial", size = 20),  # 增加到 12
+      axis.title = element_text(family = "Arial", size = 20, face = "bold"),  # 增加到 13 并加粗
+      
+      # 分面间距
+      panel.spacing = unit(1, "lines")
+    )
+}
+
+# =====================================
+# 批量生成函数
+# =====================================
+generate_all_plots <- function(data) {
+  plot_list <- list()
+  for (dv in dvs) {
+    for (iv in ivs) {
+      plot_name <- paste(iv, "vs", dv, sep = "_")
+      plot_list[[plot_name]] <- create_faceted_scatter(data, dv, iv)
+    }
+  }
+  return(plot_list)
+}
+
+# =====================================
+# 执行生成与保存
+# =====================================
+
+# 1. 生成所有图
+all_plots <- generate_all_plots(df_long)
+
+# 2. 创建文件夹
+if(!dir.exists("plots_output")) {
+  dir.create("plots_output")
+}
+
+# 3. 循环保存
+for (plot_name in names(all_plots)) {
+  
+  file_path <- paste0("plots_output/", plot_name, ".png")
+  
+  ggsave(
+    filename = file_path,
+    plot = all_plots[[plot_name]],
+    width = 8,      
+    height = 6,     
+    dpi = 300,      
+    units = "in",
+    bg = "white",
+    device = "png"
+  )
+  
+  cat("已保存:", file_path, "\n")
+}
+```
+```{r}
+library(tidyverse)
+library(ggplot2)
+
+# =====================================
+# 6張図: 各 DV-IV 組合せ1張 (order考慮なし)
+# APA形式 + 強制座標軸線 + Times New Roman + 文字拡大 + タイトルなし
+# p と r を斜体化
+# =====================================
+
+# 変数定義
+dvs <- c("Threshold", "Width") 
+ivs <- c("AQ", "PI20", "friendship")
+
+# 単一図作成関数
+create_faceted_scatter <- function(data, dv, iv) {
+  
+  # 1. 相関係数計算（order考慮なし）
+  cor_labels <- data %>%
+    group_by(intimacy, face_type) %>%
+    summarise(
+      r = cor(.data[[iv]], .data[[dv]], method = "pearson", use = "complete.obs"),
+      p = cor.test(.data[[iv]], .data[[dv]])$p.value,
+      .groups = "drop"
+    ) %>%
+    mutate(
+      # italic() を使用して斜体に
+      label = paste0("italic(r) == ", sprintf("%.3f", r), "*', '*~italic(p) == ", sprintf("%.4f", p))
+    )
+  
+  # 2. 座標範囲取得（テキスト配置用）
+  y_max <- max(data[[dv]], na.rm = TRUE)
+  x_min <- min(data[[iv]], na.rm = TRUE)
+  
+  # 3. 作図
+  ggplot(data, aes(x = .data[[iv]], y = .data[[dv]])) +
+    # 点
+    geom_point(alpha = 0.6, size = 2, color = "black") +
+    
+    # 回帰線
+    geom_smooth(method = "lm", se = FALSE, linewidth = 1, color = "blue") +
+    
+    # 座標軸線手動追加（L字型）
+    geom_vline(xintercept = -Inf, color = "black", linewidth = 0.5) +
+    geom_hline(yintercept = -Inf, color = "black", linewidth = 0.5) +
+    
+    # 相関係数テキスト - 斜体化 + フォント拡大
+    geom_text(
+      data = cor_labels,
+      aes(x = x_min, y = y_max, label = label),
+      hjust = 0, vjust = 1, size = 7,
+      color = "black",
+      family = "Times New Roman",
+      parse = TRUE,  # parse=TRUE で数式解釈を有効化
+      inherit.aes = FALSE
+    ) +
+    
+    # ファセット設定
+    facet_grid(intimacy ~ face_type) +
+    
+    # クリッピング防止
+    coord_cartesian(clip = "off") +
+    
+    # ラベル - タイトル削除
+    labs(
+      x = iv,
+      y = dv
+    ) +
+    
+    # --- テーマ設定 ---
+    theme_bw(base_size = 15, base_family = "Times New Roman") +
+    theme(
+      # グリッドと枠線削除
+      panel.grid = element_blank(),
+      panel.border = element_blank(),
+      axis.line = element_blank(),
+      
+      # ファセットラベルスタイル - フォント拡大
+      strip.background = element_rect(fill = "white", color = "black", linewidth = 0.5),
+      strip.text = element_text(face = "bold", size = 13, color = "black", 
+                                family = "Times New Roman"),
+      
+      # 座標軸テキスト - フォント拡大
+      axis.text = element_text(color = "black", family = "Times New Roman", size = 20),
+      axis.title = element_text(family = "Times New Roman", size = 20, face = "bold"),
+      
+      # ファセット間隔
+      panel.spacing = unit(1, "lines")
+    )
+}
+
+# =====================================
+# 一括生成関数
+# =====================================
+generate_all_plots <- function(data) {
+  plot_list <- list()
+  for (dv in dvs) {
+    for (iv in ivs) {
+      plot_name <- paste(iv, "vs", dv, sep = "_")
+      plot_list[[plot_name]] <- create_faceted_scatter(data, dv, iv)
+    }
+  }
+  return(plot_list)
+}
+
+# =====================================
+# 生成と保存実行
+# =====================================
+# 1. 全図生成
+all_plots <- generate_all_plots(df_long)
+
+# 2. フォルダ作成
+if(!dir.exists("plots_output")) {
+  dir.create("plots_output")
+}
+
+# 3. ループ保存
+for (plot_name in names(all_plots)) {
+  
+  file_path <- paste0("plots_output/", plot_name, ".png")
+  
+  ggsave(
+    filename = file_path,
+    plot = all_plots[[plot_name]],
+    width = 8,      
+    height = 6,     
+    dpi = 300,      
+    units = "in",
+    bg = "white",
+    device = "png"
+  )
+  
+  cat("保存完了:", file_path, "\n")
+}
+```
+```{r}
+# 必要なパッケージの読み込み
+library(ggplot2)
+
+# 図1から読み取ったデータポイント
+data <- data.frame(
+  stimulus_level = c(0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100),
+  proportion_correct = c(0, 0, 0, 0.1, 0.4, 0.7, 0.9, 1.0, 1.0, 1.0, 1.0)
+)
+
+# シグモイド関数のフィッティング
+sigmoid <- function(x, x0, k, lower, upper) {
+  lower + (upper - lower) / (1 + exp(-k * (x - x0)))
+}
+
+# 非線形最小二乗法でパラメータ推定
+fit <- nls(proportion_correct ~ lower + (upper - lower) / (1 + exp(-k * (stimulus_level - x0))),
+           data = data,
+           start = list(x0 = 45, k = 0.1, lower = 0, upper = 1),
+           control = nls.control(maxiter = 1000))
+
+# フィッティング曲線の生成
+x_smooth <- seq(0, 100, length.out = 1000)
+params <- coef(fit)
+y_smooth <- sigmoid(x_smooth, params["x0"], params["k"], params["lower"], params["upper"])
+fit_data <- data.frame(x = x_smooth, y = y_smooth)
+
+# 閾値とwidthの計算
+threshold <- params["x0"]
+x_05 <- x_smooth[which.min(abs(y_smooth - 0.05))]
+x_95 <- x_smooth[which.min(abs(y_smooth - 0.95))]
+width <- x_95 - x_05
+
+cat(sprintf("Threshold (50%%): %.2f\n", threshold))
+cat(sprintf("Width (5%%-95%%): %.2f\n", width))
+cat(sprintf("5%% point: %.2f\n", x_05))
+cat(sprintf("95%% point: %.2f\n", x_95))
+
+# 出力ディレクトリの作成
+dir.create("/mnt/user-data/outputs", showWarnings = FALSE, recursive = TRUE)
+
+# プロット作成
+png("/mnt/user-data/outputs/psychometric_function.png", width = 1000, height = 800, res = 120)
+
+par(mar = c(5, 5, 2, 4), family = "sans")
+
+# 基本プロット
+plot(data$stimulus_level, data$proportion_correct, 
+     type = "n",
+     xlim = c(-5, 110),
+     ylim = c(-0.05, 1.05),
+     xlab = "Stimulus Level",
+     ylab = "Proportion Correct",
+     cex.lab = 1.3,
+     cex.axis = 1.1,
+     las = 1)
+
+# グリッド
+grid(col = "gray90", lty = "dotted")
+
+# フィッティング曲線
+lines(fit_data$x, fit_data$y, lwd = 3, col = "black")
+
+# 水平線（0.05, 0.5, 0.95）
+abline(h = 0.05, col = "cyan3", lwd = 2, lty = 2)
+abline(h = 0.5, col = "red", lwd = 2, lty = 2)
+abline(h = 0.95, col = "cyan3", lwd = 2, lty = 2)
+
+# 垂直線（threshold と 95%点）
+abline(v = threshold, col = "gray50", lwd = 1.5, lty = 2)
+abline(v = x_95, col = "gray50", lwd = 1.5, lty = 2)
+
+# データポイント
+points(data$stimulus_level, data$proportion_correct, 
+       pch = 21, 
+       col = "white",
+       bg = "#1f77b4", 
+       cex = 2.5,
+       lwd = 2)
+
+# Width区間の表示（緑の横線）
+segments(threshold, 0.02, x_95, 0.02, col = "green3", lwd = 5)
+
+# 矢印とラベル - Threshold
+arrows(threshold - 8, 0.15, threshold, 0.08, 
+       length = 0.15, lwd = 2, col = "black")
+text(threshold - 8, 0.22, "Threshold", cex = 1.4, font = 1)
+
+# 矢印とラベル - Width
+arrows(x_95 + 8, 0.25, x_95, 0.08, 
+       length = 0.15, lwd = 2, col = "black")
+text(x_95 + 10, 0.32, "Width", cex = 1.4, font = 1)
+
+# 右側の値ラベル
+text(105, 0.95, "0.95", cex = 1.3, col = "cyan3", font = 2)
+text(105, 0.5, "0.5", cex = 1.3, col = "red", font = 2)
+text(105, 0.05, "0.05", cex = 1.3, col = "cyan3", font = 2)
+
+dev.off()
+
+cat("\n図を作成しました!\n")
+```
+

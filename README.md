@@ -63,6 +63,8 @@ pf_mean_3sd_bwd_02.m<br>
 ##
 Threshold_plot
 
-## R guidence
-
 ## LMM guidence
+Data Exportにdataを入れます(nameの状態で注意)
+LMMpre_bwd.mを実行して，データを処理します．ProcessedData_Modifiedに処理結果を保存されました．
+summall.mを実行して，ProcessedData_Modified/all_subjects_combined_gaze.csvは最終のcsvです．
+## R guidence

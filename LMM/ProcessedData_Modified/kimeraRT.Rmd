@@ -1,0 +1,180 @@
+---
+title: "LMM"
+author: "bian"
+date: "2025-12-18"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{r cars}
+summary(cars)
+```
+
+## Including Plots
+
+You can also embed plots, for example:
+
+```{r pressure, echo=FALSE}
+plot(pressure)
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+
+```{r}
+library(readxl)
+library(lme4)
+library(lmerTest)
+library(tidyverse)
+library(ggeffects)
+library(ggplot2)
+library(dplyr)
+source("anovakun_489.txt")
+```
+
+
+
+```{r}
+data = read.csv("all_subjects_combined.csv")
+
+# 将变量转为因子
+data$subject <- as.factor(data$subject)
+
+# 要移除的subject
+remove_ids <- c()
+
+# 方法1: 使用 %in% 和 !（最常用）
+data <- data[!data$subject %in% remove_ids, ]
+
+# condition重新编码：fm → f-kimera, u1m → u1-kimera
+data$condition <- gsub(" ", "", data$condition)  # 去掉所有空格
+data$condition <- gsub("^fm$", "f-kimera", data$condition)
+data$condition <- gsub("^u1m$", "u1-kimera", data$condition)
+data$condition <- as.factor(data$condition)
+
+data$response <- 1-data$response
+# RT转换为秒
+data$RT <- data$RT / 1000
+
+# percent反转后缩放：(100 - percent) / 100
+data$percent_scaled <- (100 - data$percent) / 100
+
+df_long <- data %>%
+  mutate(
+    condition = as.character(condition),
+    intimacy = case_when(
+      condition %in% c("f", "f-kimera") ~ "friend",
+      condition %in% c("u1", "u1-kimera") ~ "stranger"
+    ),
+    face_type = case_when(
+      condition %in% c("f", "u1") ~ "normal",
+      condition %in% c("f-kimera", "u1-kimera") ~ "chimeric"
+    )
+  ) %>%
+  mutate(
+    intimacy = factor(intimacy, levels = c("friend", "stranger")),
+    face_type = factor(face_type, levels = c("normal", "chimeric")),
+    subject = factor(subject)
+  )
+
+df_long <- df_long %>%
+  mutate(percent_group = case_when(
+    percent_scaled >= 0 & percent_scaled <= 0.3 ~ "low",
+    percent_scaled >= 0.35 & percent_scaled <= 0.65 ~ "middle",
+    percent_scaled >= 0.70 & percent_scaled <= 1 ~ "high"
+  )) %>%
+  mutate(percent_group = factor(percent_group, levels = c("low", "middle", "high")))
+
+# 確認分組
+df_long %>% count(percent_group)
+
+# 确认
+df_long %>% count(intimacy, face_type)
+```
+
+```{r}
+rt4_anovadata <- df_long %>%
+  group_by(subject, order,intimacy, face_type, percent_group) %>%
+  summarise(RT = mean(RT, na.rm = TRUE), .groups = "drop")
+
+anovakun(rt4_anovadata, "AsBCD", 
+         long = TRUE, 
+         between = "order",
+         within = c("intimacy","face_type", "percent_group"), 
+         dv = "RT",
+         peta = TRUE,cin = T,auto = T)
+```
+```{r}
+rt_anovadata <- df_long %>%
+  group_by(subject, intimacy, face_type, percent_group) %>%
+  summarise(RT = mean(RT, na.rm = TRUE), .groups = "drop")
+
+anovakun(rt_anovadata, "sABC", 
+         long = TRUE, 
+         within = c("intimacy","face_type", "percent_group"), 
+         dv = "RT",
+         peta = TRUE,cin = T,auto = T)
+```
+
+```{r}
+library(ggplot2)
+
+# --- データ準備 (変更なし) ---
+rt_sum <- data.frame(
+  intimacy = rep(c("Friend", "Friend", "Friend", "Friend", "Friend", "Friend",
+                   "Stranger", "Stranger", "Stranger", "Stranger", "Stranger", "Stranger"), 1),
+  face_type = rep(c("Normal", "Normal", "Normal", "Chimeric", "Chimeric", "Chimeric"), 2),
+  percent_group = rep(c("low", "middle", "high"), 4),
+  RT = c(730.5156, 1031.9450, 1070.1622, 692.1745, 949.7287, 1013.7586,
+         613.6995, 864.9351, 931.1365, 649.6462, 892.8533, 1003.9231),
+  ci_lower = c(662.8596, 945.6568, 914.4344, 620.9999, 851.7117, 934.9449,
+               536.3798, 765.8290, 820.7198, 572.5328, 773.6222, 880.0605),
+  ci_upper = c(798.1716, 1118.2333, 1225.8900, 763.3491, 1047.7457, 1092.5723,
+               691.0192, 964.0412, 1041.5533, 726.7596, 1012.0845, 1127.7857)
+)
+
+rt_sum$percent_group <- factor(rt_sum$percent_group, 
+                               levels = c("low", "middle", "high"))
+rt_sum$intimacy <- factor(rt_sum$intimacy, 
+                          levels = c("Friend", "Stranger"))
+rt_sum$face_type <- factor(rt_sum$face_type,
+                           levels = c("Normal", "Chimeric"))
+
+colors <- c("Friend" = "#7B68EE", "Stranger" = "#FF8C00")
+pd <- position_dodge(width = 0.15)
+
+# --- プロット作成 (Y軸の上限を少し調整) ---
+p <- ggplot(rt_sum, aes(x = percent_group, y = RT, 
+                        color = intimacy, group = intimacy)) +
+  geom_errorbar(aes(ymin = ci_lower, ymax = ci_upper),
+                width = 0.1, linewidth = 0.6, position = pd) +
+  geom_line(linewidth = 0.8, position = pd) +
+  geom_point(size = 3, position = pd) +
+  facet_wrap(~ face_type, ncol = 2) +
+  scale_color_manual(values = colors, name = "Intimacy") +
+  scale_x_discrete(labels = c("Low", "Middle", "High")) +
+  scale_y_continuous(limits = c(500, 1350), breaks = seq(500, 1300, 100)) +
+  labs(x = "Morphing Percentage", y = "Reaction Time (ms)") +
+  theme_bw() +
+  theme(
+    panel.grid = element_blank(),
+    panel.border = element_rect(color = "black", linewidth = 0.8),
+    axis.title = element_text(size = 12, face = "bold"),
+    axis.text = element_text(size = 10, color = "black"),
+    legend.position = "bottom",
+    legend.title = element_text(size = 11, face = "bold"),
+    strip.text = element_text(size = 11, face = "bold"),
+    strip.background = element_rect(fill = "white", color = "black")
+  )
+print(p)
+ggsave("RT.png", width = 8, height = 5, dpi = 300)
+```
+

@@ -1,0 +1,1058 @@
+---
+title: "LMM"
+author: "bian"
+date: "2025-12-18"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{r cars}
+summary(cars)
+```
+
+## Including Plots
+
+You can also embed plots, for example:
+
+```{r pressure, echo=FALSE}
+plot(pressure)
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+
+```{r}
+library(readxl)
+library(lme4)
+library(lmerTest)
+library(tidyverse)
+library(ggeffects)
+library(ggplot2)
+library(dplyr)
+source("anovakun_489.txt")
+```
+
+
+
+```{r}
+data = read.csv("all_subjects_combined.csv")
+
+# 将变量转为因子
+data$subject <- as.factor(data$subject)
+
+# 要移除的subject
+remove_ids <- c()
+
+# 方法1: 使用 %in% 和 !（最常用）
+data <- data[!data$subject %in% remove_ids, ]
+
+# condition重新编码：fm → f-kimera, u1m → u1-kimera
+data$condition <- gsub(" ", "", data$condition)  # 去掉所有空格
+data$condition <- gsub("^fm$", "f-kimera", data$condition)
+data$condition <- gsub("^u1m$", "u1-kimera", data$condition)
+data$condition <- as.factor(data$condition)
+
+data$response <- 1-data$response
+# RT转换为秒
+data$RT <- data$RT / 1000
+
+# percent反转后缩放：(100 - percent) / 100
+data$percent_scaled <- (100 - data$percent) / 100
+```
+
+
+```{r}
+df_long <- data %>%
+  mutate(
+    condition = as.character(condition),
+    intimacy = case_when(
+      condition %in% c("f", "f-kimera") ~ "friend",
+      condition %in% c("u1", "u1-kimera") ~ "stranger"
+    ),
+    face_type = case_when(
+      condition %in% c("f", "u1") ~ "normal",
+      condition %in% c("f-kimera", "u1-kimera") ~ "chimeric"
+    )
+  ) %>%
+  mutate(
+    intimacy = factor(intimacy, levels = c("friend", "stranger")),
+    face_type = factor(face_type, levels = c("normal", "chimeric")),
+    subject = factor(subject)
+  )
+# 确认
+df_long %>% count(intimacy, face_type)
+```
+
+```{r}
+m6 <- lmer(RT ~ poly(percent_scaled, 2)*intimacy*face_type +
+               (1 + poly(percent_scaled, 2) | subject), 
+           data = df_long)
+summary(m6)
+```
+```{r}
+library(ggplot2)
+library(dplyr)
+library(lme4)
+
+# 被験者を3人選択（実際のデータに基づいて変更してください）
+selected_ids <- c("6")  # データに存在する被験者IDに変更
+
+# ランダム効果を取得
+re <- ranef(m6)$subject
+
+# 固定効果の係数を取得
+fixed_coefs <- fixef(m6)
+
+# poly変換の係数を保存(一貫性のため)
+poly_coefs <- attr(poly(df_long$percent_scaled, 2), "coefs")
+
+# 固定効果の切片と係数
+fixed_intercept <- fixed_coefs["(Intercept)"]
+fixed_slope1 <- fixed_coefs["poly(percent_scaled, 2)1"]
+fixed_slope2 <- fixed_coefs["poly(percent_scaled, 2)2"]
+
+# ドッジ幅を設定
+dodge_width <- 0.02  # この値を調整してずらす幅を変更
+
+# ========== 図1: ランダム切片のみ ==========
+newdata1 <- expand.grid(
+  percent_scaled = seq(min(df_long$percent_scaled), max(df_long$percent_scaled), length.out = 100),
+  intimacy = factor("friend", levels = c("friend", "stranger")),
+  face_type = factor("normal", levels = c("normal", "chimeric")),
+  subject = factor(selected_ids, levels = levels(df_long$subject))
+)
+
+# 固定効果のみの予測
+newdata1$fit_fixed <- predict(m6, newdata = newdata1, re.form = NA)
+
+# ランダム切片を取得
+intercept_df <- data.frame(
+  subject = factor(selected_ids, levels = levels(df_long$subject)),
+  intercept_shift = re[selected_ids, "(Intercept)"]
+)
+
+# ランダム切片のみを追加
+newdata1 <- newdata1 %>%
+  left_join(intercept_df, by = "subject") %>%
+  mutate(fit_intercept_only = fit_fixed + intercept_shift)
+
+# 原始データ(friend + normal条件でフィルタリング)
+data_selected <- df_long %>% 
+  filter(subject %in% selected_ids, 
+         intimacy == "friend",
+         face_type == "normal") %>%
+  group_by(subject, percent_scaled) %>%
+  summarise(RT = mean(RT, na.rm = TRUE), .groups = "drop")
+
+data_selected1 <- data_selected %>%
+  left_join(intercept_df, by = "subject")
+
+get_fixed_pred <- function(x_val, newdata_ref) {
+  idx <- which.min(abs(newdata_ref$percent_scaled - x_val))
+  newdata_ref$fit_fixed[idx]
+}
+
+data_selected1 <- data_selected1 %>%
+  rowwise() %>%
+  mutate(fit_at_x = get_fixed_pred(percent_scaled, newdata1) + intercept_shift) %>%
+  ungroup()
+
+# プロット1
+plot1 <- ggplot() +
+  geom_segment(data = data_selected1,
+               aes(x = percent_scaled, xend = percent_scaled,
+                   y = RT, yend = fit_at_x, group = subject),
+               color = "gray70", linewidth = 0.4,
+               position = position_dodge(width = dodge_width)) +
+  geom_point(data = data_selected1, 
+             aes(x = percent_scaled, y = RT, shape = subject),
+             color = "gray60", size = 2.5,
+             position = position_dodge(width = dodge_width)) +
+  geom_line(data = newdata1, 
+            aes(x = percent_scaled, y = fit_intercept_only, group = subject),
+            linetype = "dashed", color = "gray50", linewidth = 0.6) +
+  geom_line(data = newdata1 %>% filter(subject == selected_ids[1]), 
+            aes(x = percent_scaled, y = fit_fixed),
+            linewidth = 1.3, color = "black") +
+  scale_shape_manual(values = c(16, 17, 15)) +
+  labs(x = "Morph Percentage", y = "Response Time (ms)",
+       title = "Random Intercept Only") +
+  theme_classic(base_size = 14) +
+  theme(legend.position = "none")
+
+
+# ========== 図2: ランダム切片 + ランダム1次項(直線のみ)==========
+newdata2 <- expand.grid(
+  percent_scaled = seq(min(df_long$percent_scaled), max(df_long$percent_scaled), length.out = 100),
+  intimacy = factor("friend", levels = c("friend", "stranger")),
+  face_type = factor("normal", levels = c("normal", "chimeric")),
+  subject = factor(selected_ids, levels = levels(df_long$subject))
+)
+
+newdata2$fit_fixed <- predict(m6, newdata = newdata2, re.form = NA)
+
+poly_matrix <- poly(newdata2$percent_scaled, 2, coefs = poly_coefs)
+
+slope1_df <- data.frame(
+  subject = factor(selected_ids, levels = levels(df_long$subject)),
+  intercept_shift = re[selected_ids, "(Intercept)"],
+  slope1_shift = re[selected_ids, "poly(percent_scaled, 2)1"]
+)
+
+newdata2 <- newdata2 %>%
+  left_join(slope1_df, by = "subject") %>%
+  mutate(
+    fit_linear_only = (fixed_intercept + intercept_shift) + 
+                      (fixed_slope1 + slope1_shift) * poly_matrix[, 1]
+  )
+
+data_selected2 <- data_selected %>%
+  left_join(slope1_df, by = "subject")
+
+data_selected2 <- data_selected2 %>%
+  rowwise() %>%
+  mutate(
+    poly_val = poly(percent_scaled, 2, coefs = poly_coefs)[1],
+    fit_at_x = (fixed_intercept + intercept_shift) + 
+               (fixed_slope1 + slope1_shift) * poly_val
+  ) %>%
+  ungroup()
+
+# プロット2
+plot2 <- ggplot() +
+  geom_segment(data = data_selected2,
+               aes(x = percent_scaled, xend = percent_scaled,
+                   y = RT, yend = fit_at_x, group = subject),
+               color = "gray70", linewidth = 0.4,
+               position = position_dodge(width = dodge_width)) +
+  geom_point(data = data_selected2, 
+             aes(x = percent_scaled, y = RT, shape = subject),
+             color = "gray60", size = 2.5,
+             position = position_dodge(width = dodge_width)) +
+  geom_line(data = newdata2, 
+            aes(x = percent_scaled, y = fit_linear_only, group = subject),
+            linetype = "dashed", color = "gray50", linewidth = 0.6) +
+  geom_line(data = newdata2 %>% filter(subject == selected_ids[1]), 
+            aes(x = percent_scaled, y = fit_fixed),
+            linewidth = 1.3, color = "black") +
+  scale_shape_manual(values = c(16, 17, 15)) +
+  labs(x = "Morph Percentage", y = "Response Time (ms)",
+       title = "Random Intercept + Slope (Linear)") +
+  theme_classic(base_size = 14) +
+  theme(legend.position = "none")
+
+
+# ========== 図3: ランダム切片 + ランダム1次項 + ランダム2次項 ==========
+newdata3 <- expand.grid(
+  percent_scaled = seq(min(df_long$percent_scaled), max(df_long$percent_scaled), length.out = 100),
+  intimacy = factor("friend", levels = c("friend", "stranger")),
+  face_type = factor("normal", levels = c("normal", "chimeric")),
+  subject = factor(selected_ids, levels = levels(df_long$subject))
+)
+
+newdata3$fit_fixed <- predict(m6, newdata = newdata3, re.form = NA)
+
+poly_matrix3 <- poly(newdata3$percent_scaled, 2, coefs = poly_coefs)
+
+slope2_df <- data.frame(
+  subject = factor(selected_ids, levels = levels(df_long$subject)),
+  intercept_shift = re[selected_ids, "(Intercept)"],
+  slope1_shift = re[selected_ids, "poly(percent_scaled, 2)1"],
+  slope2_shift = re[selected_ids, "poly(percent_scaled, 2)2"]
+)
+
+newdata3 <- newdata3 %>%
+  left_join(slope2_df, by = "subject") %>%
+  mutate(
+    fit_with_slope2 = (fixed_intercept + intercept_shift) + 
+                      (fixed_slope1 + slope1_shift) * poly_matrix3[, 1] + 
+                      (fixed_slope2 + slope2_shift) * poly_matrix3[, 2]
+  )
+
+# data_selected3の計算部分を修正
+data_selected3 <- data_selected %>%
+  left_join(slope2_df, by = "subject")
+
+# poly_valsをリストではなく直接計算
+data_selected3 <- data_selected3 %>%
+  rowwise() %>%
+  mutate(
+    poly_val1 = poly(percent_scaled, 2, coefs = poly_coefs)[1],
+    poly_val2 = poly(percent_scaled, 2, coefs = poly_coefs)[2],
+    fit_at_x = (fixed_intercept + intercept_shift) + 
+               (fixed_slope1 + slope1_shift) * poly_val1 + 
+               (fixed_slope2 + slope2_shift) * poly_val2
+  ) %>%
+  ungroup()
+
+# プロット3
+plot3 <- ggplot() +
+  geom_segment(data = data_selected3,
+               aes(x = percent_scaled, xend = percent_scaled,
+                   y = RT, yend = fit_at_x, group = subject),
+               color = "gray70", linewidth = 0.4,
+               position = position_dodge(width = dodge_width)) +
+  geom_point(data = data_selected3, 
+             aes(x = percent_scaled, y = RT, shape = subject),
+             color = "gray60", size = 2.5,
+             position = position_dodge(width = dodge_width)) +
+  geom_line(data = newdata3, 
+            aes(x = percent_scaled, y = fit_with_slope2, group = subject),
+            linetype = "dashed", color = "gray50", linewidth = 0.6) +
+  geom_line(data = newdata3 %>% filter(subject == selected_ids[1]), 
+            aes(x = percent_scaled, y = fit_fixed),
+            linewidth = 1.3, color = "black") +
+  scale_shape_manual(values = c(16, 17, 15)) +
+  labs(x = "Morph Percentage", y = "Response Time (ms)",
+       title = "Random Intercept + Slopes (Linear + Quadratic)") +
+  theme_classic(base_size = 14) +
+  theme(legend.position = "none")
+
+
+# ========== 図4: ランダム切片 + ランダム2次項のみ(対称)==========
+newdata4 <- expand.grid(
+  percent_scaled = seq(min(df_long$percent_scaled), max(df_long$percent_scaled), length.out = 100),
+  intimacy = factor("friend", levels = c("friend", "stranger")),
+  face_type = factor("normal", levels = c("normal", "chimeric")),
+  subject = factor(selected_ids, levels = levels(df_long$subject))
+)
+
+newdata4$fit_fixed <- predict(m6, newdata = newdata4, re.form = NA)
+
+poly_matrix4 <- poly(newdata4$percent_scaled, 2, coefs = poly_coefs)
+
+quad_only_df <- data.frame(
+  subject = factor(selected_ids, levels = levels(df_long$subject)),
+  intercept_shift = re[selected_ids, "(Intercept)"],
+  slope2_shift = re[selected_ids, "poly(percent_scaled, 2)2"]
+)
+
+newdata4 <- newdata4 %>%
+  left_join(quad_only_df, by = "subject") %>%
+  mutate(
+    fit_quad_symmetric = (fixed_intercept + intercept_shift) + 
+                         (fixed_slope2 + slope2_shift) * poly_matrix4[, 2]
+  )
+
+data_selected4 <- data_selected %>%
+  left_join(quad_only_df, by = "subject")
+
+data_selected4 <- data_selected4 %>%
+  rowwise() %>%
+  mutate(
+    poly_val2 = poly(percent_scaled, 2, coefs = poly_coefs)[2],
+    fit_at_x = (fixed_intercept + intercept_shift) + 
+               (fixed_slope2 + slope2_shift) * poly_val2
+  ) %>%
+  ungroup()
+
+# プロット4
+plot4 <- ggplot() +
+  geom_segment(data = data_selected4,
+               aes(x = percent_scaled, xend = percent_scaled,
+                   y = RT, yend = fit_at_x, group = subject),
+               color = "gray70", linewidth = 0.4,
+               position = position_dodge(width = dodge_width)) +
+  geom_point(data = data_selected4, 
+             aes(x = percent_scaled, y = RT, shape = subject),
+             color = "gray60", size = 2.5,
+             position = position_dodge(width = dodge_width)) +
+  geom_line(data = newdata4, 
+            aes(x = percent_scaled, y = fit_quad_symmetric, group = subject),
+            linetype = "dashed", color = "gray50", linewidth = 0.6) +
+  geom_line(data = newdata4 %>% filter(subject == selected_ids[1]), 
+            aes(x = percent_scaled, y = fit_fixed),
+            linewidth = 1.3, color = "black") +
+  scale_shape_manual(values = c(16, 17, 15)) +
+  labs(x = "Morph Percentage", y = "Response Time (ms)",
+       title = "Random Intercept + Quadratic (Symmetric)") +
+  theme_classic(base_size = 14) +
+  theme(legend.position = "none")
+
+# プロットを表示
+print(plot1)
+print(plot2)
+print(plot3)
+print(plot4)
+```
+```{r}
+library(ggplot2)
+library(dplyr)
+library(lme4)
+
+# ランダム効果と固定効果を取得
+re <- ranef(m6)$subject
+fixed_coefs <- fixef(m6)
+poly_coefs <- attr(poly(df_long$percent_scaled, 2), "coefs")
+fixed_intercept <- fixed_coefs["(Intercept)"]
+fixed_slope1 <- fixed_coefs["poly(percent_scaled, 2)1"]
+fixed_slope2 <- fixed_coefs["poly(percent_scaled, 2)2"]
+
+cat("========== friend + normal 条件で誤差を計算 ==========\n\n")
+
+# 誤差を保存するリスト
+error_results <- list()
+
+# 各被験者について誤差を計算
+for (i in 1:20) {
+  
+  subj_id <- as.character(i)
+  
+  # データをフィルタリング
+  data_check <- df_long %>%
+    filter(as.character(subject) == subj_id,
+           as.character(intimacy) == "friend",
+           as.character(face_type) == "normal")
+  
+  if (nrow(data_check) == 0) next
+  
+  # データを集約
+  data_selected <- data_check %>%
+    group_by(percent_scaled) %>%
+    summarise(RT = mean(RT, na.rm = TRUE), .groups = "drop")
+  
+  # ランダム効果を取得
+  intercept_shift <- re[subj_id, "(Intercept)"]
+  slope1_shift <- re[subj_id, "poly(percent_scaled, 2)1"]
+  slope2_shift <- re[subj_id, "poly(percent_scaled, 2)2"]
+  
+  # poly変換を一度だけ実行
+  poly_matrix <- poly(data_selected$percent_scaled, 2, coefs = poly_coefs)
+  
+  # 各予測モデルの予測値を計算
+  data_selected <- data_selected %>%
+    mutate(
+      # 固定効果のみ
+      pred_fixed = fixed_intercept + 
+                   fixed_slope1 * poly_matrix[, 1] + 
+                   fixed_slope2 * poly_matrix[, 2],
+      
+      # ランダム切片のみ
+      pred_intercept = (fixed_intercept + intercept_shift) + 
+                       fixed_slope1 * poly_matrix[, 1] + 
+                       fixed_slope2 * poly_matrix[, 2],
+      
+      # ランダム切片 + 1次
+      pred_linear = (fixed_intercept + intercept_shift) + 
+                    (fixed_slope1 + slope1_shift) * poly_matrix[, 1] + 
+                    fixed_slope2 * poly_matrix[, 2],
+      
+      # ランダム切片 + 1次 + 2次（フルモデル）
+      pred_full = (fixed_intercept + intercept_shift) + 
+                  (fixed_slope1 + slope1_shift) * poly_matrix[, 1] + 
+                  (fixed_slope2 + slope2_shift) * poly_matrix[, 2],
+      
+      # ランダム切片 + 2次のみ
+      pred_quad = (fixed_intercept + intercept_shift) + 
+                  fixed_slope1 * poly_matrix[, 1] + 
+                  (fixed_slope2 + slope2_shift) * poly_matrix[, 2]
+    )
+  
+  # 各モデルの誤差を計算
+  error_fixed <- sqrt(mean((data_selected$RT - data_selected$pred_fixed)^2, na.rm = TRUE))
+  error_intercept <- sqrt(mean((data_selected$RT - data_selected$pred_intercept)^2, na.rm = TRUE))
+  error_linear <- sqrt(mean((data_selected$RT - data_selected$pred_linear)^2, na.rm = TRUE))
+  error_full <- sqrt(mean((data_selected$RT - data_selected$pred_full)^2, na.rm = TRUE))
+  error_quad <- sqrt(mean((data_selected$RT - data_selected$pred_quad)^2, na.rm = TRUE))
+  
+  # 平均絶対誤差（MAE）
+  mae_fixed <- mean(abs(data_selected$RT - data_selected$pred_fixed), na.rm = TRUE)
+  mae_intercept <- mean(abs(data_selected$RT - data_selected$pred_intercept), na.rm = TRUE)
+  mae_linear <- mean(abs(data_selected$RT - data_selected$pred_linear), na.rm = TRUE)
+  mae_full <- mean(abs(data_selected$RT - data_selected$pred_full), na.rm = TRUE)
+  mae_quad <- mean(abs(data_selected$RT - data_selected$pred_quad), na.rm = TRUE)
+  
+  # 相関係数
+  cor_fixed <- cor(data_selected$RT, data_selected$pred_fixed, use = "complete.obs")
+  cor_intercept <- cor(data_selected$RT, data_selected$pred_intercept, use = "complete.obs")
+  cor_linear <- cor(data_selected$RT, data_selected$pred_linear, use = "complete.obs")
+  cor_full <- cor(data_selected$RT, data_selected$pred_full, use = "complete.obs")
+  cor_quad <- cor(data_selected$RT, data_selected$pred_quad, use = "complete.obs")
+  
+  cat("被験者", subj_id, ":\n")
+  cat("  図1(切片のみ)    - RMSE:", round(error_intercept, 2), ", MAE:", round(mae_intercept, 2), ", r:", round(cor_intercept, 3), "\n")
+  cat("  図2(切片+1次)    - RMSE:", round(error_linear, 2), ", MAE:", round(mae_linear, 2), ", r:", round(cor_linear, 3), "\n")
+  cat("  図3(切片+1次+2次)- RMSE:", round(error_full, 2), ", MAE:", round(mae_full, 2), ", r:", round(cor_full, 3), "\n")
+  cat("  図4(切片+2次)    - RMSE:", round(error_quad, 2), ", MAE:", round(mae_quad, 2), ", r:", round(cor_quad, 3), "\n\n")
+  
+  error_results[[length(error_results) + 1]] <- data.frame(
+    subject = subj_id,
+    rmse_fixed = error_fixed,
+    rmse_intercept = error_intercept,
+    rmse_linear = error_linear,
+    rmse_full = error_full,
+    rmse_quad = error_quad,
+    mae_fixed = mae_fixed,
+    mae_intercept = mae_intercept,
+    mae_linear = mae_linear,
+    mae_full = mae_full,
+    mae_quad = mae_quad,
+    cor_fixed = cor_fixed,
+    cor_intercept = cor_intercept,
+    cor_linear = cor_linear,
+    cor_full = cor_full,
+    cor_quad = cor_quad,
+    n_points = nrow(data_selected)
+  )
+}
+
+# 結果を統合
+error_df <- bind_rows(error_results)
+
+cat("\n========== 総合結果 ==========\n\n")
+
+# 各モデルごとに誤差が小さい順にソート
+cat("【図1: ランダム切片のみ】RMSE が小さい順:\n")
+top_intercept <- error_df %>% arrange(rmse_intercept) %>% select(subject, rmse_intercept, mae_intercept, cor_intercept)
+print(head(top_intercept, 10))
+
+cat("\n【図2: ランダム切片 + 1次】RMSE が小さい順:\n")
+top_linear <- error_df %>% arrange(rmse_linear) %>% select(subject, rmse_linear, mae_linear, cor_linear)
+print(head(top_linear, 10))
+
+cat("\n【図3: ランダム切片 + 1次 + 2次（フルモデル）】RMSE が小さい順:\n")
+top_full <- error_df %>% arrange(rmse_full) %>% select(subject, rmse_full, mae_full, cor_full)
+print(head(top_full, 10))
+
+cat("\n【図4: ランダム切片 + 2次のみ】RMSE が小さい順:\n")
+top_quad <- error_df %>% arrange(rmse_quad) %>% select(subject, rmse_quad, mae_quad, cor_quad)
+print(head(top_quad, 10))
+
+# 総合評価（全モデルの平均誤差）
+error_df <- error_df %>%
+  mutate(
+    avg_rmse = (rmse_intercept + rmse_linear + rmse_full + rmse_quad) / 4,
+    avg_mae = (mae_intercept + mae_linear + mae_full + mae_quad) / 4,
+    avg_cor = (cor_intercept + cor_linear + cor_full + cor_quad) / 4
+  )
+
+cat("\n\n========== 【最終推奨】総合評価（全モデルの平均RMSE） ==========\n")
+best_overall <- error_df %>% 
+  arrange(avg_rmse) %>% 
+  select(subject, avg_rmse, avg_mae, avg_cor, rmse_intercept, rmse_linear, rmse_full, rmse_quad)
+
+print(head(best_overall, 10))
+
+cat("\n\n【最も推奨される3つのID】:\n")
+top3_ids <- head(best_overall$subject, 3)
+cat("ID: ", paste(top3_ids, collapse = ", "), "\n")
+cat("\nこれらの被験者は、すべての図（図1〜4）で最も誤差が小さいです。\n")
+
+# 詳細情報
+cat("\n詳細情報:\n")
+for (i in 1:min(3, nrow(best_overall))) {
+  subj <- best_overall$subject[i]
+  cat(sprintf("  %d. 被験者 %s: 平均RMSE = %.2f, 平均MAE = %.2f, 平均相関 = %.3f\n", 
+              i, subj, best_overall$avg_rmse[i], best_overall$avg_mae[i], best_overall$avg_cor[i]))
+}
+
+# 視覚化
+cat("\n\n========== 誤差の視覚化 ==========\n")
+
+# RMSEのヒストグラム
+p1 <- ggplot(error_df, aes(x = avg_rmse)) +
+  geom_histogram(bins = 15, fill = "steelblue", alpha = 0.7) +
+  geom_vline(data = error_df %>% filter(subject %in% top3_ids),
+             aes(xintercept = avg_rmse), color = "red", linetype = "dashed", linewidth = 1) +
+  labs(title = "Distribution of Average RMSE (Top 3 in Red)",
+       x = "Average RMSE", y = "Count") +
+  theme_classic(base_size = 12)
+
+print(p1)
+
+# 各モデルのRMSE比較
+error_long <- error_df %>%
+  select(subject, rmse_intercept, rmse_linear, rmse_full, rmse_quad) %>%
+  tidyr::pivot_longer(cols = -subject, names_to = "model", values_to = "rmse") %>%
+  mutate(
+    model = factor(model, 
+                   levels = c("rmse_intercept", "rmse_linear", "rmse_full", "rmse_quad"),
+                   labels = c("Intercept Only", "Intercept + Linear", "Full Model", "Intercept + Quad"))
+  )
+
+p2 <- ggplot(error_long %>% filter(subject %in% top3_ids), 
+             aes(x = model, y = rmse, color = subject, group = subject)) +
+  geom_line(linewidth = 1) +
+  geom_point(size = 3) +
+  labs(title = "RMSE Comparison for Top 3 Subjects",
+       x = "Model", y = "RMSE", color = "Subject") +
+  theme_classic(base_size = 12) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+print(p2)
+```
+
+```{r}
+# 取得預測值（三向交互作用）
+pred <- as.data.frame(ggpredict(m6, terms = c("percent_scaled [all]", "intimacy", "face_type")))
+
+data_plot <- df_long %>%
+  select(percent_scaled, intimacy, face_type, RT) %>%
+  dplyr::rename(y = RT,
+                facet = face_type)
+
+# 設定因子標籤（讓圖更好看）
+pred$group <- factor(pred$group, 
+                     levels = c("friend", "stranger"),
+                     labels = c("Friend", "Stranger"))
+pred$facet <- factor(pred$facet, 
+                     levels = c("normal", "chimeric"),
+                     labels = c("Normal", "Chimeric"))
+
+data_plot$intimacy <- factor(data_plot$intimacy, 
+                              levels = c("friend", "stranger"),
+                              labels = c("Friend", "Stranger"))
+data_plot$facet <- factor(data_plot$facet, 
+                           levels = c("normal", "chimeric"),
+                           labels = c("Normal", "Chimeric"))
+
+# APA 格式繪圖
+ggplot() +
+  # 平均值 ± SE
+  stat_summary(data = data_plot, 
+               aes(x = percent_scaled, y = y, color = intimacy),
+               fun = mean, 
+               fun.min = function(x) mean(x) - sd(x)/sqrt(length(x)),
+               fun.max = function(x) mean(x) + sd(x)/sqrt(length(x)),
+               geom = "pointrange", 
+               size = 0.25,
+               linewidth = 0.4,
+               alpha = 0.5,
+               position = position_dodge(width = 0.03)) +
+  # 信賴區間
+  geom_ribbon(data = pred,
+              aes(x = x, ymin = conf.low, ymax = conf.high, fill = group), 
+              alpha = 0.2) +
+  # 預測線
+  geom_line(data = pred,
+            aes(x = x, y = predicted, color = group), 
+            linewidth = 1) +
+  facet_wrap(~ facet, nrow = 1) +
+  labs(x = "Morph Level", 
+       y = "RT (ms)",
+       color = "Intimacy",
+       fill = "Intimacy") +
+  scale_color_manual(values = c("Friend" = "#D55E00", "Stranger" = "#0072B2")) +
+  scale_fill_manual(values = c("Friend" = "#D55E00", "Stranger" = "#0072B2")) +
+  theme_classic() +
+  theme(
+    text = element_text(family = "serif", size = 12),
+    axis.line = element_line(color = "black", linewidth = 0.5),
+    axis.ticks = element_line(color = "black", linewidth = 0.5),
+    axis.text = element_text(color = "black", size = 10),
+    axis.title = element_text(size = 12),
+    strip.text = element_text(size = 12, face = "bold"),
+    strip.background = element_blank(),
+    legend.position = "right",
+    legend.title = element_text(size = 11),
+    legend.text = element_text(size = 10),
+    legend.key = element_rect(fill = "white", color = NA),
+    panel.spacing = unit(1, "lines"),
+    panel.border = element_rect(color = "black", fill = NA, linewidth = 0.5)
+  )
+```
+```{r}
+df_long <- df_long %>%
+  mutate(percent_group = case_when(
+    percent_scaled >= 0 & percent_scaled <= 0.3 ~ "low",
+    percent_scaled >= 0.35 & percent_scaled <= 0.65 ~ "middle",
+    percent_scaled >= 0.70 & percent_scaled <= 1 ~ "high"
+  )) %>%
+  mutate(percent_group = factor(percent_group, levels = c("low", "middle", "high")))
+```
+
+```{r}
+# 筛选 low 的数据
+rtlow_anovadata <- df_long %>%
+  filter(percent_group == "low") %>% 
+  group_by(subject, order, intimacy, face_type,PI20) %>%
+  summarise(RT = mean(RT, na.rm = TRUE), .groups = "drop")
+
+cor.test(rtlow_anovadata$RT,rtlow_anovadata$PI20)
+
+library(ggplot2)
+library(ggpubr)
+
+ggplot(rtlow_anovadata, aes(x = PI20, y = RT)) +
+  geom_point(alpha = 0.5, color = "steelblue") +
+  geom_smooth(method = "lm", color = "darkred", se = FALSE) +
+  stat_cor(
+    method = "pearson", 
+    label.x.npc = "left", 
+    label.y.npc = "top",
+    cor.coef.name = "r"  # ここで小文字の r に変更
+  ) +
+  facet_grid(intimacy ~ face_type) + 
+  labs(title = "Low: RT-PI20",
+       x = "PI20 Score",
+       y = "Reaction Time (ms)") +
+  theme_bw() + 
+  theme(
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank()
+  )
+```
+
+```{r}
+# 筛选 middle 的数据
+rtmiddle_anovadata <- df_long %>%
+  filter(percent_group == "middle") %>% 
+  group_by(subject, order, intimacy, face_type,PI20) %>%
+  summarise(RT = mean(RT, na.rm = TRUE), .groups = "drop")
+
+cor.test(rtmiddle_anovadata$RT,rtmiddle_anovadata$PI20)
+
+library(ggplot2)
+library(ggpubr)
+
+# 1. 分面散点图 + 回归线 (查看 PI20 与 RT 在四种条件下的相关性)
+ggplot(rtmiddle_anovadata, aes(x = PI20, y = RT)) +
+  geom_point(alpha = 0.5, color = "steelblue") +
+  geom_smooth(method = "lm", color = "darkred",se = FALSE) +
+  # 核心步骤：按照 intimacy 和 face_type 分成 2x2 的四张图
+  stat_cor(method = "pearson", label.x.npc = "left", label.y.npc = "top",cor.coef.name = "r") +
+  facet_grid(intimacy ~ face_type) + 
+  labs(title = "Middle: RT-PI20",
+       x = "PI20 Score",
+       y = "Reaction Time (ms)") +
+  theme_bw() + 
+    theme(
+      panel.grid.major = element_blank(), # 去掉主网格线
+      panel.grid.minor = element_blank()  # 去掉次网格线
+    )
+```
+
+```{r}
+# 筛选 high 的数据
+rthigh_anovadata <- df_long %>%
+  filter(percent_group == "high") %>% 
+  group_by(subject, order, intimacy, face_type,PI20) %>%
+  summarise(RT = mean(RT, na.rm = TRUE), .groups = "drop")
+
+cor.test(rthigh_anovadata$RT,rthigh_anovadata$PI20)
+
+library(ggplot2)
+library(ggpubr)
+
+# 1. 分面散点图 + 回归线 (查看 PI20 与 RT 在四种条件下的相关性)
+ggplot(rthigh_anovadata, aes(x = PI20, y = RT)) +
+  geom_point(alpha = 0.5, color = "steelblue") +
+  geom_smooth(method = "lm", color = "darkred",se = FALSE) +
+  # 核心步骤：按照 intimacy 和 face_type 分成 2x2 的四张图
+  stat_cor(method = "pearson", label.x.npc = "left", label.y.npc = "top",cor.coef.name = "r") +
+  facet_grid(intimacy ~ face_type) + 
+  labs(title = "High: RT-PI20 ",
+       x = "PI20 Score",
+       y = "Reaction Time (ms)") +
+  theme_bw() + 
+    theme(
+      panel.grid.major = element_blank(), # 去掉主网格线
+      panel.grid.minor = element_blank()  # 去掉次网格线
+    )
+```
+
+
+```{r}
+rt0_anovadata <- df_long %>%
+  group_by(subject, order,intimacy, face_type, percent_group) %>%
+  summarise(RT = mean(RT, na.rm = TRUE), .groups = "drop")
+
+anovakun(rt0_anovadata, "AsBCD", 
+         long = TRUE, 
+         between = "order",
+         within = c("intimacy","face_type", "percent_group"), 
+         dv = "RT",
+         peta = TRUE,cin = T,auto = T)
+```
+
+```{r}
+rt0_anovadata <- df_long %>%
+  group_by(subject, order,intimacy, face_type, percent_group) %>%
+  summarise(RT = mean(RT, na.rm = TRUE), .groups = "drop")
+```
+
+```{r}
+# 直接筛选percent_scaled为0、0.5和1的数据
+rt0_anovadata <- df_long %>%
+  filter(percent_scaled %in% c(0, 0.7, 1)) %>%
+  mutate(percent_group = factor(percent_scaled, levels = c(0, 0.7, 1))) %>%
+  group_by(subject, order, intimacy, face_type, percent_group) %>%
+  summarise(RT = mean(RT, na.rm = TRUE), .groups = "drop")
+
+# 执行ANOVA
+anovakun(rt0_anovadata, "AsBCD", 
+         long = TRUE, 
+         between = "order",
+         within = c("intimacy", "face_type", "percent_group"), 
+         dv = "RT",
+         peta = TRUE, cin = TRUE, auto = TRUE)
+```
+```{r}
+library(ggplot2)
+
+# データフレームを作成
+rt_sum_order <- data.frame(
+  order = rep(c("f", "f", "f", "f", "f", "f",
+                "f", "f", "f", "f", "f", "f",
+                "f-kimera", "f-kimera", "f-kimera", "f-kimera", "f-kimera", "f-kimera",
+                "f-kimera", "f-kimera", "f-kimera", "f-kimera", "f-kimera", "f-kimera"), 1),
+  intimacy = rep(c("Friend", "Friend", "Friend", "Friend", "Friend", "Friend",
+                   "Stranger", "Stranger", "Stranger", "Stranger", "Stranger", "Stranger"), 2),
+  face_type = rep(c("Normal", "Normal", "Normal", "Chimeric", "Chimeric", "Chimeric"), 4),
+  percent_group = rep(c("low", "middle", "high"), 8),
+  RT = c(717.7237, 987.8537, 967.4915, 637.2759, 826.4686, 912.4098,
+         592.7113, 811.9968, 834.4453, 623.5346, 835.3166, 892.6063,
+         743.3076, 1076.0363, 1172.8329, 747.0731, 1072.9889, 1115.1073,
+         634.6877, 917.8734, 1027.8278, 675.7577, 950.3900, 1115.2400),
+  ci_lower = c(637.9145, 886.1228, 856.9610, 565.6808, 750.4761, 784.8087,
+               496.0444, 719.4227, 734.5947, 544.2474, 713.1356, 737.2921,
+               631.2628, 915.6619, 847.5330, 606.8007, 878.8472, 1001.5488,
+               502.3655, 718.8087, 806.3046, 530.9714, 715.7083, 893.6186),
+  ci_upper = c(797.5328, 1089.5847, 1078.0220, 708.8710, 902.4610, 1040.0110,
+               689.3783, 904.5710, 934.2959, 702.8218, 957.4976, 1047.9205,
+               855.3524, 1236.4108, 1498.1328, 887.3456, 1267.1306, 1228.6659,
+               767.0098, 1116.9380, 1249.3510, 820.5441, 1185.0717, 1336.8614)
+)
+
+# 因子レベルの設定
+rt_sum_order$percent_group <- factor(rt_sum_order$percent_group, 
+                                      levels = c("low", "middle", "high"))
+rt_sum_order$intimacy <- factor(rt_sum_order$intimacy, 
+                                 levels = c("Friend", "Stranger"))
+rt_sum_order$face_type <- factor(rt_sum_order$face_type,
+                                  levels = c("Normal", "Chimeric"))
+rt_sum_order$order <- factor(rt_sum_order$order,
+                              levels = c("f", "f-kimera"),
+                              labels = c("Normal-first", "Chimeric-first"))
+
+# 色の定義
+colors <- c("Friend" = "#7B68EE",
+            "Stranger" = "#FF8C00")
+
+# プロット作成（2x2のレイアウト）
+ggplot(rt_sum_order, aes(x = percent_group, y = RT, 
+                         color = intimacy, group = intimacy)) +
+  geom_errorbar(aes(ymin = ci_lower, ymax = ci_upper),
+                width = 0.1, linewidth = 0.6) +
+  geom_line(linewidth = 0.8) +
+  geom_point(size = 3) +
+  facet_grid(order ~ face_type) +
+  scale_color_manual(values = colors, name = "Intimacy") +
+  scale_x_discrete(labels = c("Low", "Middle", "High")) +
+  scale_y_continuous(limits = c(450, 1550), breaks = seq(500, 1500, 200)) +
+  labs(x = "Morphing Percentage", y = "Reaction Time (ms)") +
+  theme_bw() +
+  theme(
+    panel.grid = element_blank(),
+    panel.border = element_rect(color = "black", linewidth = 0.8),
+    axis.title = element_text(size = 12, face = "bold"),
+    axis.text = element_text(size = 10, color = "black"),
+    legend.position = "bottom",
+    legend.title = element_text(size = 11, face = "bold"),
+    strip.text = element_text(size = 11, face = "bold"),
+    strip.background = element_rect(fill = "white", color = "black")
+  )
+
+ggsave("RT_with_order.png", width = 10, height = 8, dpi = 300)
+```
+
+
+```{r}
+rt1_anovadata <- df_long %>% 
+  filter(intimacy == "friend") %>%  # 只保留friend条件
+  filter(face_type == "normal") %>%  # 只保留friend条件
+  group_by(subject, order, percent_group) %>% 
+  summarise(RT = mean(RT, na.rm = TRUE), .groups = "drop")
+
+anovakun(rt1_anovadata, "AsB", long = TRUE, 
+         between = "order", 
+         within = c("percent_group"), 
+         dv = "RT", 
+         peta = TRUE, 
+         cin = TRUE, 
+         auto = TRUE)
+```
+
+
+```{r}
+# 筛选 percent_scaled 为 0 的数据
+rt100_anovadata <- df_long %>%
+  filter(percent_scaled == 1) %>%  # 只保留 percent_scaled 为 0 的数据
+  group_by(subject, order, intimacy, face_type) %>%
+  summarise(RT = mean(RT, na.rm = TRUE), .groups = "drop")
+```
+
+
+```{r}
+# 进行 4 要因分散分析
+# A: subject (被験者間)
+# s: order (被験者間)
+# B: intimacy (被験者内)
+# C: face_type (被験者内)
+anovakun(rt100_anovadata, 
+         "AsBC",
+         long = TRUE, 
+         between = "order",                    # 被験者間要因
+         within = c("intimacy", "face_type"),  # 被験者内要因
+         dv = "RT",                            # 従属変数
+         peta = TRUE,                          # 偏イータ二乗を計算
+         cin = TRUE,                           # 信頼区間を表示
+         auto = TRUE)                          # 自動設定
+```
+
+```{r}
+# 数据过滤：只保留middle和low组
+df_long_filtered <- df_long %>%
+  mutate(percent_group = case_when(
+    percent_scaled >= 0 & percent_scaled <= 0.3 ~ "low",
+    percent_scaled >= 0.35 & percent_scaled <= 0.65 ~ "middle",
+    percent_scaled >= 0.70 & percent_scaled <= 1 ~ "high"
+  )) %>%
+  mutate(percent_group = factor(percent_group, levels = c("low", "middle", "high"))) %>%
+  filter(percent_group %in% c("low", "middle"))  # 只保留low和middle组
+
+# 重新设置factor levels（去掉不需要的high level）
+df_long_filtered <- df_long_filtered %>%
+  mutate(percent_group = factor(percent_group, levels = c("low", "middle")))
+
+# ANOVA分析
+rt0_anovadata <- df_long_filtered %>%
+  group_by(subject, intimacy, face_type, percent_group) %>%
+  summarise(RT = mean(RT, na.rm = TRUE), .groups = "drop")
+
+anovakun(rt0_anovadata, "sABC", 
+         long = TRUE, 
+         within = c("intimacy", "face_type", "percent_group"), 
+         dv = "RT",
+         peta = TRUE, cin = TRUE, auto = TRUE)
+```
+
+```{r}
+rt_anovadata <- df_long %>%
+  group_by(subject, intimacy, face_type, percent_group) %>%
+  summarise(RT = mean(RT, na.rm = TRUE), .groups = "drop")
+
+anovakun(rt_anovadata, "sABC", 
+         long = TRUE, 
+         within = c("intimacy","face_type", "percent_group"), 
+         dv = "RT",
+         peta = TRUE,cin = T,auto = T)
+```
+```{r}
+library(ggplot2)
+
+# anovakun の結果から手動でデータフレームを作成
+rt_sum <- data.frame(
+  intimacy = rep(c("Friend", "Friend", "Friend", "Friend", "Friend", "Friend",
+                   "Stranger", "Stranger", "Stranger", "Stranger", "Stranger", "Stranger"), 1),
+  face_type = rep(c("Normal", "Normal", "Normal", "Chimeric", "Chimeric", "Chimeric"), 2),
+  percent_group = rep(c("low", "middle", "high"), 4),
+  RT = c(730.5156, 1031.9450, 1070.1622, 692.1745, 949.7287, 1013.7586,
+         613.6995, 864.9351, 931.1365, 649.6462, 892.8533, 1003.9231),
+  ci_lower = c(662.8596, 945.6568, 914.4344, 620.9999, 851.7117, 934.9449,
+               536.3798, 765.8290, 820.7198, 572.5328, 773.6222, 880.0605),
+  ci_upper = c(798.1716, 1118.2333, 1225.8900, 763.3491, 1047.7457, 1092.5723,
+               691.0192, 964.0412, 1041.5533, 726.7596, 1012.0845, 1127.7857)
+)
+
+# 因子レベルの設定
+rt_sum$percent_group <- factor(rt_sum$percent_group, 
+                                levels = c("low", "middle", "high"))
+rt_sum$intimacy <- factor(rt_sum$intimacy, 
+                           levels = c("Friend", "Stranger"))
+rt_sum$face_type <- factor(rt_sum$face_type,
+                            levels = c("Normal", "Chimeric"))
+
+# 色の定義
+colors <- c("Friend" = "#7B68EE",
+            "Stranger" = "#FF8C00")
+
+# プロット作成
+ggplot(rt_sum, aes(x = percent_group, y = RT, 
+                   color = intimacy, group = intimacy)) +
+  geom_errorbar(aes(ymin = ci_lower, ymax = ci_upper),
+                width = 0.1, linewidth = 0.6) +
+  geom_line(linewidth = 0.8) +
+  geom_point(size = 3) +
+  facet_wrap(~ face_type, ncol = 2) +
+  scale_color_manual(values = colors, name = "Intimacy") +
+  scale_x_discrete(labels = c("Low", "Middle", "High")) +
+  scale_y_continuous(limits = c(500, 1250), breaks = seq(500, 1200, 100)) +
+  labs(x = "Morphing Percentage", y = "Reaction Time (ms)") +
+  theme_bw() +
+  theme(
+    panel.grid = element_blank(),
+    panel.border = element_rect(color = "black", linewidth = 0.8),
+    axis.title = element_text(size = 12, face = "bold"),
+    axis.text = element_text(size = 10, color = "black"),
+    legend.position = "bottom",
+    legend.title = element_text(size = 11, face = "bold"),
+    strip.text = element_text(size = 11, face = "bold"),
+    strip.background = element_rect(fill = "white", color = "black")
+  )
+
+ggsave("RT.png", width = 8, height = 5, dpi = 300)
+```
+
+```{r}
+library(ggplot2)
+
+# --- データ準備 (変更なし) ---
+rt_sum <- data.frame(
+  intimacy = rep(c("Friend", "Friend", "Friend", "Friend", "Friend", "Friend",
+                   "Stranger", "Stranger", "Stranger", "Stranger", "Stranger", "Stranger"), 1),
+  face_type = rep(c("Normal", "Normal", "Normal", "Chimeric", "Chimeric", "Chimeric"), 2),
+  percent_group = rep(c("low", "middle", "high"), 4),
+  RT = c(730.5156, 1031.9450, 1070.1622, 692.1745, 949.7287, 1013.7586,
+         613.6995, 864.9351, 931.1365, 649.6462, 892.8533, 1003.9231),
+  ci_lower = c(662.8596, 945.6568, 914.4344, 620.9999, 851.7117, 934.9449,
+               536.3798, 765.8290, 820.7198, 572.5328, 773.6222, 880.0605),
+  ci_upper = c(798.1716, 1118.2333, 1225.8900, 763.3491, 1047.7457, 1092.5723,
+               691.0192, 964.0412, 1041.5533, 726.7596, 1012.0845, 1127.7857)
+)
+
+rt_sum$percent_group <- factor(rt_sum$percent_group, 
+                               levels = c("low", "middle", "high"))
+rt_sum$intimacy <- factor(rt_sum$intimacy, 
+                          levels = c("Friend", "Stranger"))
+rt_sum$face_type <- factor(rt_sum$face_type,
+                           levels = c("Normal", "Chimeric"))
+
+colors <- c("Friend" = "#7B68EE", "Stranger" = "#FF8C00")
+pd <- position_dodge(width = 0.15)
+
+# --- プロット作成 (Y軸の上限を少し調整) ---
+p <- ggplot(rt_sum, aes(x = percent_group, y = RT, 
+                        color = intimacy, group = intimacy)) +
+  geom_errorbar(aes(ymin = ci_lower, ymax = ci_upper),
+                width = 0.1, linewidth = 0.6, position = pd) +
+  geom_line(linewidth = 0.8, position = pd) +
+  geom_point(size = 3, position = pd) +
+  facet_wrap(~ face_type, ncol = 2) +
+  scale_color_manual(values = colors, name = "Intimacy") +
+  scale_x_discrete(labels = c("Low", "Middle", "High")) +
+  scale_y_continuous(limits = c(500, 1350), breaks = seq(500, 1300, 100)) +
+  labs(x = "Morphing Percentage", y = "Reaction Time (ms)") +
+  theme_bw() +
+  theme(
+    panel.grid = element_blank(),
+    panel.border = element_rect(color = "black", linewidth = 0.8),
+    axis.title = element_text(size = 12, face = "bold"),
+    axis.text = element_text(size = 10, color = "black"),
+    legend.position = "bottom",
+    legend.title = element_text(size = 11, face = "bold"),
+    strip.text = element_text(size = 11, face = "bold"),
+    strip.background = element_rect(fill = "white", color = "black")
+  )
+
+print(p)
+```
+

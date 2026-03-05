@@ -10,7 +10,7 @@ To use this code:
 ## 実行中の警告は無視すればいい
 ## 新たなデータを処理する前に，元のファイルをrenameする
 
-## MATLAB guidence
+## Psychometric Function MATLAB guidence
 MyMatlab version:24.1.0.2628055 (R2024a) Update 4
 
 Please ensure your folder structure matches:
@@ -60,7 +60,7 @@ Metrics/eachCsvのそれぞれのIDのcsvファイルを読む<br>
 pf_mean_3sd_bwd_02.m<br>
 最終的には，こっちの結果を使われる
 
-## R guidence
+## kimera guidence
 LMM/Data Exportにdataを入れます(nameの状態で注意)
 LMMpre_bwd.mを実行して，データを処理します．ProcessedData_Modifiedに処理結果を保存されました．
 summall.mを実行して，ProcessedData_Modified/all_subjects_combined_gaze.csvは最終のcsvです．

@@ -1,0 +1,1916 @@
+---
+title: "bunnsekiR_bwd_20250524"
+author: "bian"
+date: "2025-05-24"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{r cars}
+summary(cars)
+```
+
+## Including Plots
+
+You can also embed plots, for example:
+
+```{r pressure, echo=FALSE}
+plot(pressure)
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+
+
+```{r}
+library(readxl)
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+library(cluster)
+source("anovakun_489.txt")
+```
+
+```{r}
+all_data = read.csv("alldata.csv")
+```
+
+```{r}
+assign("start_id", 1, envir = .GlobalEnv)
+assign("end_id", 100, envir = .GlobalEnv)
+missing_ids <- c()
+missing_ids <- sort(c(missing_ids, 42))#width100
+missing_ids <- sort(c(missing_ids, 20,59,73,83,57,19,55,70,79,92,38))#PI20
+missing_ids <- sort(c(missing_ids, 14))#miss of syou
+missing_ids <- sort(c(missing_ids, 47,50))#RT too long
+missing_ids <- sort(c(missing_ids, 96,31))#width偏差
+missing_ids1 <- missing_ids
+
+# 删除这些ID对应的行
+filtered_all <- all_data[!all_data$No %in% missing_ids1, ]
+
+missing_ids_PI20 <- c(20, 59, 73, 83, 57, 19, 55, 70, 79, 92, 38)
+PI20_data <- all_data[all_data$No %in% missing_ids_PI20, ]
+```
+
+```{r}
+# 输出到CSV文件
+write.csv(filtered_all, "filtered_all.csv", row.names = FALSE, fileEncoding = "UTF-8")
+print("数据已保存到: filtered_all.csv")
+# 输出到CSV文件
+write.csv(PI20_data, "PI20_data.csv", row.names = FALSE, fileEncoding = "UTF-8")
+print("数据已保存到: PI20_data")
+```
+
+```{r}
+filtered_all_data <- filtered_all
+
+# 直接使用原数据，只需要确保每个participant都有完整的三个条件
+result_Th <- filtered_all_data[filtered_all_data$condition %in% c("u1", "f", "u2"), ]
+
+# 检查是否有participant缺少某个条件
+participant_condition_count <- table(result_Th$No, result_Th$condition)
+cat("每个participant的条件数量:\n")
+print(participant_condition_count)
+
+# 只保留有完整三个条件的participant
+complete_participants <- names(which(rowSums(participant_condition_count > 0) == 3))
+result_Th <- result_Th[result_Th$No %in% complete_participants, ]
+
+# 检查还剩下多少个No
+cat("剩余的participant数量:", length(unique(result_Th$No)), "\n")
+cat("剩余的participant编号:", sort(unique(result_Th$No)), "\n")
+
+# 按No和condition排序
+result_Th <- result_Th[order(result_Th$No, result_Th$condition), ]
+```
+```{r}
+Th <- result_Th %>%
+  select(No, order, gender,condition,Threshold)
+anovakun(Th, "ABsC", long = TRUE,between = c("order", "gender"), within = "condition", dv = "Threshold",eta=TRUE)
+```
+
+
+##Threshold*order*condition*gender
+```{r}
+##Threshold*order*condition*gender
+Th <- result_Th %>%
+  select(No, order, gender,condition,Threshold)
+anovakun(Th, "ABsC", long = TRUE,between = c("order", "gender"), within = "condition", dv = "Threshold",eta=TRUE)
+```
+
+##Width*order*condition*gender
+```{r}
+Th <- result_Th %>%
+  select(No, order, gender,condition,Width)
+anovakun(Th, "ABsC", long = TRUE,between = c("order", "gender"), within = "condition", dv = "Width",eta=TRUE)
+```
+##RT_mean*order*condition*gender
+```{r}
+Th <- result_Th %>%
+  select(No, order, gender,condition,RT_mean)
+anovakun(Th, "ABsC", long = TRUE,between = c("order", "gender"), within = "condition", dv = "RT_mean",eta=TRUE)
+```
+```{r}
+# 创建包含所需列名的向量
+selected_cols <- c("No", "condition", "Threshold", "Width", "Slope", "RT_mean", 
+                   "key", "order", "gender", "age", "AQ", "social", 
+                   "attention_switching", "local_attention", "communication", 
+                   "imagination", "Friendship", "s.u1", "s.f", "s.u2", "PI20")
+
+# 选择指定列创建新数据框
+result_new <- result_Th[, selected_cols]
+
+
+# 方法1：使用dplyr和tidyr包
+library(dplyr)
+library(tidyr)
+
+# 假设您的数据叫result_Th
+# 转换为宽格式
+result_wide <- result_new %>%
+  pivot_wider(
+    id_cols = c(No, setdiff(names(result_new), c("condition", "Threshold", "Width", "Slope", "RT_mean"))),
+    names_from = condition,
+    values_from = c(Threshold, Width, Slope, RT_mean),
+    names_sep = "_"
+  )
+
+result_wide <- result_wide %>%
+  mutate(
+    differ1 = case_when(
+      order == "fu" ~ RT_mean_u1 - RT_mean_f,      # 当order为fu时，u1-f
+      order == "uf" ~ RT_mean_f - RT_mean_u1,      # 当order为uf时，f-u1
+      TRUE ~ NA_real_                               # 其他情况设为NA
+    ),
+    differ2 = case_when(
+      order == "fu" ~ RT_mean_u2 - RT_mean_u1,     # 当order为fu时，u2-u1
+      order == "uf" ~ RT_mean_u2 - RT_mean_f,      # 当order为uf时，u2-f
+      TRUE ~ NA_real_                               # 其他情况设为NA
+    )
+  )
+```
+
+```{r}
+by(result_wide, result_wide$order, function(x) {
+  cor.test(as.numeric(x$differ1), x$AQ)
+})
+
+by(result_wide, result_wide$order, function(x) {
+  cor.test(as.numeric(x$differ2), x$AQ)
+})
+
+by(result_wide, result_wide$order, function(x) {
+  cor.test(as.numeric(x$differ1), x$social)
+})
+
+by(result_wide, result_wide$order, function(x) {
+  cor.test(as.numeric(x$differ2), x$social)
+})
+```
+
+
+```{r}
+cor.test(as.numeric(result_Th$RT_mean),result_Th$AQ)
+cor.test(as.numeric(result_Th$RT_mean),result_Th$social)
+cor.test(as.numeric(result_Th$RT_mean),result_Th$attention_switching)
+cor.test(as.numeric(result_Th$RT_mean),result_Th$local_attention)
+cor.test(as.numeric(result_Th$RT_mean),result_Th$communication)
+cor.test(as.numeric(result_Th$RT_mean),result_Th$imagination)
+cor.test(as.numeric(result_Th$RT_mean),result_Th$Friendship)
+cor.test(as.numeric(result_Th$RT_mean),result_Th$PI20)
+```
+
+```{r}
+by(result_Th, result_Th$order, function(x) {
+  cor.test(as.numeric(x$RT_mean), x$social,conf.level = 0.975)
+})
+```
+
+
+```{r}
+# Set up data
+result_RT <- result_Th
+
+# Define percent variables and related variables
+percent_vars <- c("percent_0", "percent_10", "percent_20", "percent_30", "percent_35", 
+                  "percent_40", "percent_45", "percent_50", "percent_55", "percent_60", 
+                  "percent_65", "percent_70", "percent_80", "percent_90", "percent_100")
+
+outcome_vars <- c("AQ", "social", "attention_switching", "local_attention", 
+                  "communication", "imagination")
+
+# Create result storage matrices
+correlation_results <- matrix(NA, nrow = length(percent_vars), ncol = length(outcome_vars))
+p_values <- matrix(NA, nrow = length(percent_vars), ncol = length(outcome_vars))
+
+rownames(correlation_results) <- percent_vars
+colnames(correlation_results) <- outcome_vars
+rownames(p_values) <- percent_vars
+colnames(p_values) <- outcome_vars
+
+# Perform correlation analysis
+for (i in 1:length(percent_vars)) {
+  for (j in 1:length(outcome_vars)) {
+    # Conduct correlation test
+    test_result <- cor.test(as.numeric(result_RT[[percent_vars[i]]]), 
+                           result_RT[[outcome_vars[j]]])
+    
+    # Store results
+    correlation_results[i, j] <- test_result$estimate
+    p_values[i, j] <- test_result$p.value
+  }
+}
+
+# Output results
+cat("=== Correlation Coefficient Matrix ===\n")
+print(round(correlation_results, 3))
+
+cat("\n=== P-value Matrix ===\n")
+print(round(p_values, 3))
+
+# Significance markers
+cat("\n=== Significant Results (p < 0.05) ===\n")
+significant_results <- which(p_values < 0.05, arr.ind = TRUE)
+if (nrow(significant_results) > 0) {
+  for (k in 1:nrow(significant_results)) {
+    row_idx <- significant_results[k, 1]
+    col_idx <- significant_results[k, 2]
+    significance_level <- ifelse(p_values[row_idx, col_idx] < 0.001, "***",
+                                ifelse(p_values[row_idx, col_idx] < 0.01, "**", "*"))
+    cat(sprintf("%s & %s: r = %.3f, p = %.3f %s\n", 
+                percent_vars[row_idx], 
+                outcome_vars[col_idx],
+                correlation_results[row_idx, col_idx],
+                p_values[row_idx, col_idx],
+                significance_level))
+  }
+} else {
+  cat("No significant correlations found (p < 0.05)\n")
+}
+
+# Create heatmap visualization (if ggplot2 package is available)
+if (require(ggplot2) && require(reshape2)) {
+  # Correlation coefficient heatmap
+  cor_melted <- melt(correlation_results)
+  names(cor_melted) <- c("Percent", "Outcome", "Correlation")
+  
+  # Add significance stars
+  p_melted <- melt(p_values)
+  names(p_melted) <- c("Percent", "Outcome", "P_value")
+  
+  # Create significance labels
+  p_melted$significance <- ifelse(p_melted$P_value < 0.001, "***",
+                                 ifelse(p_melted$P_value < 0.01, "**",
+                                       ifelse(p_melted$P_value < 0.05, "*", "")))
+  
+  # Merge correlation and significance data
+  plot_data <- merge(cor_melted, p_melted, by = c("Percent", "Outcome"))
+  
+  p1 <- ggplot(plot_data, aes(x = Outcome, y = Percent, fill = Correlation)) +
+    geom_tile() +
+    geom_text(aes(label = significance), color = "black", size = 5, vjust = 0.5) +
+    scale_fill_gradient2(low = "blue", mid = "white", high = "red", 
+                         midpoint = 0, limit = c(-1, 1)) +
+    theme_minimal() +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+    labs(title = "Correlation Coefficient Heatmap", 
+         x = "Outcome Variables", 
+         y = "Percent Variables",
+         fill = "Correlation\nCoefficient",
+         caption = "* p < 0.05, ** p < 0.01, *** p < 0.001")
+  
+  print(p1)
+  
+  # P-value heatmap
+  p2 <- ggplot(p_melted, aes(x = Outcome, y = Percent, fill = P_value)) +
+    geom_tile() +
+    geom_text(aes(label = significance), color = "black", size = 5, vjust = 0.5) +
+    scale_fill_gradient(low = "red", high = "white", limit = c(0, 1)) +
+    theme_minimal() +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+    labs(title = "P-value Heatmap", 
+         x = "Outcome Variables", 
+         y = "Percent Variables",
+         fill = "P-value",
+         caption = "* p < 0.05, ** p < 0.01, *** p < 0.001")
+  
+  print(p2)
+}
+```
+
+
+```{r}
+cor.test(result_Th$Threshold,result_Th$max_RT_percent)
+```
+
+```{r}
+result_RT <- result_Th
+cor.test(as.numeric(result_RT$percent_0),result_RT$AQ)
+cor.test(as.numeric(result_RT$percent_10),result_RT$AQ)
+cor.test(as.numeric(result_RT$percent_20),result_RT$AQ)
+cor.test(as.numeric(result_RT$percent_30),result_RT$AQ)
+cor.test(as.numeric(result_RT$percent_35),result_RT$AQ)
+cor.test(as.numeric(result_RT$percent_40),result_RT$AQ)
+cor.test(as.numeric(result_RT$percent_45),result_RT$AQ)
+cor.test(as.numeric(result_RT$percent_50),result_RT$AQ)
+cor.test(as.numeric(result_RT$percent_55),result_RT$AQ)
+cor.test(as.numeric(result_RT$percent_60),result_RT$AQ)
+cor.test(as.numeric(result_RT$percent_65),result_RT$AQ)
+cor.test(as.numeric(result_RT$percent_70),result_RT$AQ)
+cor.test(as.numeric(result_RT$percent_80),result_RT$AQ)
+cor.test(as.numeric(result_RT$percent_90),result_RT$AQ)
+cor.test(as.numeric(result_RT$percent_100),result_RT$AQ)
+```
+
+
+```{r}
+# 加载必要的包
+library(lme4)
+library(lmerTest)  
+library(emmeans)   
+library(sjPlot)    
+library(performance) 
+
+# 准备数据
+Th <- result_Th %>%
+  select(No, order, gender, condition, RT_mean)
+
+# 确保因子变量正确编码
+Th$No <- as.factor(Th$No)
+Th$order <- as.factor(Th$order)
+Th$gender <- as.factor(Th$gender)
+Th$condition <- as.factor(Th$condition)
+
+# 建立线性混合模型
+# No作为随机效应(被试内变量)
+# condition作为被试内固定效应
+model <- lmer(RT_mean ~ order + condition + order:condition + (1|No), 
+                    data = Th, REML = TRUE)
+summary(model)
+```
+```{r}
+# 为result_Th数据添加session列（任务位置）
+library(dplyr)
+
+# 方法1：使用case_when添加session列
+result_Th <- result_Th %>%
+  mutate(
+    session = case_when(
+      # fu顺序：f(位置1) → u1(位置2) → u2(位置3)
+      order == "fu" & condition == "f" ~ 1,
+      order == "fu" & condition == "u1" ~ 2,
+      order == "fu" & condition == "u2" ~ 3,
+      # uf顺序：u1(位置1) → f(位置2) → u2(位置3)
+      order == "uf" & condition == "u1" ~ 1,
+      order == "uf" & condition == "f" ~ 2,
+      order == "uf" & condition == "u2" ~ 3
+    )
+  )
+
+learning_model <- lmer(RT_mean ~ session + (1|No), data = result_Th)
+summary(learning_model)
+
+# 2. 排除学习效应后的条件差异
+condition_model <- lmer(RT_mean ~ condition + session + (1|No), data = result_Th)
+summary(condition_model)
+```
+```{r}
+# 关键模型：检验session×order交互
+model_test <- lmer(RT_mean ~ session + order + session:order + (1|No), 
+                   data = result_Th)
+summary(model_test)
+
+# 基于学习效应差异的最终分析模型
+library(lme4)
+library(lmerTest)
+library(emmeans)
+
+# 最终模型：控制不同的学习效应，分析条件差异
+final_model <- lmer(RT_mean ~ condition + session + order + session:order + 
+                    (1|No), data = result_Th)
+
+print("=== 最终模型：控制学习效应后的条件差异 ===")
+summary(final_model)
+
+# 提取排除学习效应后的条件差异
+print("\n=== 边际均值分析（控制学习效应） ===")
+condition_emmeans <- emmeans(final_model, "condition")
+print("各条件的边际均值（已控制session和order效应）:")
+print(condition_emmeans)
+
+print("\n=== 条件间配对比较（排除学习效应） ===")
+condition_contrasts <- pairs(condition_emmeans)
+print(condition_contrasts)
+
+# 可视化学习曲线的差异
+print("\n=== 学习曲线预测值 ===")
+session_order_emmeans <- emmeans(final_model, ~ session | order)
+print("各顺序组在不同session的预测均值:")
+print(session_order_emmeans)
+
+# 计算具体的学习效应
+print("\n=== 学习效应计算 ===")
+# fu组：session从1到3的变化
+fu_learning <- -83.287 * 2  # session变化2个单位(1→3)
+print(paste("FU组学习效应 (session 1→3):", round(fu_learning, 2), "ms"))
+
+# uf组：考虑交互效应
+uf_learning <- (-83.287 + 23.972) * 2  # session变化2个单位
+print(paste("UF组学习效应 (session 1→3):", round(uf_learning, 2), "ms"))
+
+print(paste("学习效应差异:", round(abs(fu_learning - uf_learning), 2), "ms"))
+
+# 检查模型拟合
+print("\n=== 模型比较 ===")
+# 简单模型（假设学习效应相同）
+simple_model <- lmer(RT_mean ~ condition + session + order + (1|No), 
+                     data = result_Th)
+
+# 模型比较
+anova_comparison <- anova(simple_model, final_model)
+print("模型比较（是否需要保留学习效应差异）:")
+print(anova_comparison)
+
+# 如果p < 0.1，建议使用复杂模型（考虑学习效应差异）
+if(anova_comparison$`Pr(>Chisq)`[2] < 0.1) {
+  print("建议: 保留session:order交互效应")
+  print("结论: 两个顺序组的学习效应确实不同")
+} else {
+  print("建议: 可以使用简化模型")
+  print("结论: 学习效应差异不显著")
+}
+
+print("\n=== 最终解释 ===")
+print("1. 存在显著的学习效应（session主效应）")
+print("2. 两个顺序组的学习效应有差异（交互效应边缘显著）")
+print("3. 控制学习效应后，可以获得条件的纯差异")
+print("4. 这种方法成功分离了学习效应和条件效应")
+```
+
+```{r}
+write.csv(result_Th, file = "result_Th.csv", row.names = TRUE)
+```
+
+```{r}
+# 加载必要的包
+library(ggplot2)
+library(gridExtra)
+library(dplyr)
+
+# 抑制geom_smooth的警告信息
+options(warn = -1)  # 临时抑制警告
+
+# 定义一个函数来进行相关性分析并生成图表
+create_correlation_plot <- function(data, x_var, y_var, x_label, y_label) {
+  # 进行相关性检验
+  cor_result <- cor.test(data[[x_var]], data[[y_var]])
+  
+  # 打印相关性结果
+  cat("\n=== ", x_label, " vs ", y_label, " ===\n")
+  cat("Correlation coefficient (r):", round(cor_result$estimate, 4), "\n")
+  cat("95% Confidence Interval:", round(cor_result$conf.int, 4), "\n")
+  cat("t-statistic:", round(cor_result$statistic, 4), "\n")
+  cat("p-value:", format(cor_result$p.value, scientific = TRUE), "\n")
+  cat("Significance:", ifelse(cor_result$p.value < 0.001, "***", 
+                            ifelse(cor_result$p.value < 0.01, "**",
+                                  ifelse(cor_result$p.value < 0.05, "*", "ns"))), "\n")
+  
+  # 格式化p值显示
+  p_formatted <- if(cor_result$p.value < 0.001) {
+    "< 0.001"
+  } else if(cor_result$p.value < 0.01) {
+    sprintf("= %.3f", cor_result$p.value)
+  } else {
+    sprintf("= %.3f", cor_result$p.value)
+  }
+  
+  # 创建散点图
+  p <- ggplot(data, aes_string(x = x_var, y = y_var)) +
+    geom_point(alpha = 0.6, size = 2.5, color = "steelblue") +
+    geom_smooth(method = "lm", se = TRUE, color = "red", alpha = 0.3, formula = y ~ x) +
+    labs(
+      x = x_label,
+      y = y_label,
+      title = paste("Correlation:", x_label, "vs", y_label),
+      subtitle = paste("r =", round(cor_result$estimate, 3), 
+                      ", p", p_formatted,
+                      ifelse(cor_result$p.value < 0.001, " ***", 
+                            ifelse(cor_result$p.value < 0.01, " **",
+                                  ifelse(cor_result$p.value < 0.05, " *", ""))))
+    ) +
+    theme_minimal() +
+    theme(
+      plot.title = element_text(size = 12, face = "bold"),
+      plot.subtitle = element_text(size = 10, color = "gray50"),
+      axis.title = element_text(size = 11),
+      axis.text = element_text(size = 10)
+    )
+  
+  return(list(plot = p, correlation = cor_result))
+}
+
+# 进行所有相关性分析并生成图表
+correlations <- list()
+
+# 1. AQ vs look
+result1 <- create_correlation_plot(result_Th, "AQ", "RT_mean", "AQ Score", "RT_mean")
+correlations$AQ <- result1
+
+# 2. social vs look
+result2 <- create_correlation_plot(result_Th, "social", "RT_mean", "Social Score", "RT_mean")
+correlations$social <- result2
+
+# 3. attention_switching vs look
+result3 <- create_correlation_plot(result_Th, "attention_switching", "RT_mean", "Attention Switching", "RT_mean")
+correlations$attention_switching <- result3
+
+# 4. local_attention vs look
+result4 <- create_correlation_plot(result_Th, "local_attention", "RT_mean", "Local Attention", "RT_mean")
+correlations$local_attention <- result4
+
+# 5. communication vs look
+result5 <- create_correlation_plot(result_Th, "communication", "RT_mean", "Communication", "RT_mean")
+correlations$communication <- result5
+
+# 6. imagination vs look
+result6 <- create_correlation_plot(result_Th, "imagination", "RT_mean", "Imagination", "RT_mean")
+correlations$imagination <- result6
+
+# 7. PI20 vs look
+result7 <- create_correlation_plot(result_Th, "PI20", "RT_mean", "PI20 Score", "RT_mean")
+correlations$PI20 <- result7
+
+# 8. Friendship vs look
+result8 <- create_correlation_plot(result_Th, "Friendship", "RT_mean", "Friendship Score", "RT_mean")
+correlations$Friendship <- result8
+
+# 提取所有图表
+plots <- lapply(correlations, function(x) x$plot)
+
+# 在RStudio中单独显示每个图表
+cat("\n=== DISPLAYING INDIVIDUAL PLOTS ===\n")
+
+# 1. AQ vs look
+cat("Displaying Plot 1: AQ Score vs Look Behavior\n")
+print(plots$AQ)
+
+# 2. social vs look  
+cat("Displaying Plot 2: Social Score vs Look Behavior\n")
+print(plots$social)
+
+# 3. attention_switching vs look
+cat("Displaying Plot 3: Attention Switching vs Look Behavior\n")
+print(plots$attention_switching)
+
+# 4. local_attention vs look
+cat("Displaying Plot 4: Local Attention vs Look Behavior\n")
+print(plots$local_attention)
+
+# 5. communication vs look
+cat("Displaying Plot 5: Communication vs Look Behavior\n")
+print(plots$communication)
+
+# 6. imagination vs look
+cat("Displaying Plot 6: Imagination vs Look Behavior\n")
+print(plots$imagination)
+
+# 7. PI20 vs look
+cat("Displaying Plot 7: PI20 Score vs Look Behavior\n")
+print(plots$PI20)
+
+# 8. Friendship vs look
+cat("Displaying Plot 8: Friendship Score vs Look Behavior\n")
+print(plots$Friendship)
+
+# 可选：如果需要保存单独的图表文件
+save_individual_plots <- TRUE  # 设置为FALSE如果不需要保存
+
+if(save_individual_plots) {
+  cat("\n=== SAVING INDIVIDUAL PLOTS ===\n")
+  
+  # 保存每个图表为单独的PNG文件
+  ggsave("plot_AQ_vs_look.png", plots$AQ, width = 8, height = 6, dpi = 300)
+  ggsave("plot_social_vs_look.png", plots$social, width = 8, height = 6, dpi = 300)
+  ggsave("plot_attention_switching_vs_look.png", plots$attention_switching, width = 8, height = 6, dpi = 300)
+  ggsave("plot_local_attention_vs_look.png", plots$local_attention, width = 8, height = 6, dpi = 300)
+  ggsave("plot_communication_vs_look.png", plots$communication, width = 8, height = 6, dpi = 300)
+  ggsave("plot_imagination_vs_look.png", plots$imagination, width = 8, height = 6, dpi = 300)
+  ggsave("plot_PI20_vs_look.png", plots$PI20, width = 8, height = 6, dpi = 300)
+  ggsave("plot_friendship_vs_look.png", plots$Friendship, width = 8, height = 6, dpi = 300)
+  
+  cat("Individual plot files saved\n")
+}
+
+# 可选：创建组合图表（如果需要）
+create_combined_plot <- FALSE  # 设置为TRUE如果需要组合图表
+
+if(create_combined_plot) {
+  # 创建2x4的网格布局
+  grid_plot <- grid.arrange(grobs = plots, ncol = 2, nrow = 4,
+                           top = "Correlation Analysis: Various Measures vs Look Behavior")
+  
+  # 保存组合图表
+  ggsave("correlation_analysis_grid.png", grid_plot, width = 12, height = 16, dpi = 300)
+  cat("Combined grid plot saved as correlation_analysis_grid.png\n")
+}
+
+# 创建相关性系数汇总表
+correlation_summary <- data.frame(
+  Variable = names(correlations),
+  Correlation = sapply(correlations, function(x) round(x$correlation$estimate, 4)),
+  P_value = sapply(correlations, function(x) format(x$correlation$p.value, scientific = TRUE)),
+  Significance = sapply(correlations, function(x) {
+    p_val <- x$correlation$p.value
+    ifelse(p_val < 0.001, "***", 
+           ifelse(p_val < 0.01, "**",
+                  ifelse(p_val < 0.05, "*", "ns")))
+  }),
+  CI_lower = sapply(correlations, function(x) round(x$correlation$conf.int[1], 4)),
+  CI_upper = sapply(correlations, function(x) round(x$correlation$conf.int[2], 4))
+)
+
+print("\n=== CORRELATION SUMMARY TABLE ===")
+print(correlation_summary)
+
+# 保存汇总表
+write.csv(correlation_summary, "correlation_summary.csv", row.names = FALSE)
+
+cat("\n=== ANALYSIS COMPLETE ===\n")
+cat("Individual plots created and combined into grid layout\n")
+cat("Files saved:\n")
+cat("- correlation_analysis_grid.png (combined plot)\n")
+cat("- correlation_summary.csv (summary table)\n")
+
+# 恢复警告设置
+options(warn = 0)
+```
+```{r}
+# 按order和condition分组（修正了原代码中的错误）
+group_uf_f <- subset(result_Th, order == "uf" & condition == "f")
+group_uf_u1 <- subset(result_Th, order == "uf" & condition == "u1")
+group_uf_u2 <- subset(result_Th, order == "uf" & condition == "u2")
+group_fu_f <- subset(result_Th, order == "fu" & condition == "f")
+group_fu_u1 <- subset(result_Th, order == "fu" & condition == "u1")  # 修正：原来错误地写成了group_fu_f
+group_fu_u2 <- subset(result_Th, order == "fu" & condition == "u2")  # 修正：原来错误地写成了group_fu_f
+
+# 定义要分析的变量
+variables <- c("AQ", "social", "attention_switching", "local_attention", 
+               "communication", "imagination", "Friendship", "PI20")
+
+# 定义组列表
+groups <- list(
+  "uf_f" = group_uf_f,
+  "uf_u1" = group_uf_u1,
+  "uf_u2" = group_uf_u2,
+  "fu_f" = group_fu_f,
+  "fu_u1" = group_fu_u1,
+  "fu_u2" = group_fu_u2
+)
+
+# 创建函数来进行相关分析并格式化输出
+perform_correlation_analysis <- function(group_data, group_name) {
+  cat("\n=== ", group_name, " 组相关分析结果 ===\n")
+  cat("样本量: ", nrow(group_data), "\n\n")
+  
+  # 存储结果
+  results <- data.frame(
+    Variable = character(),
+    r = numeric(),
+    p_value = numeric(),
+    CI_lower = numeric(),
+    CI_upper = numeric(),
+    Significance = character(),
+    stringsAsFactors = FALSE
+  )
+  
+  for (var in variables) {
+    if (var %in% names(group_data) && !all(is.na(group_data[[var]]))) {
+      test_result <- cor.test(group_data$RT_mean, group_data[[var]], 
+                             method = "pearson", conf.level = 0.95)
+      
+      # 判断显著性
+      sig_level <- ifelse(test_result$p.value < 0.001, "***",
+                         ifelse(test_result$p.value < 0.01, "**",
+                               ifelse(test_result$p.value < 0.05, "*", "ns")))
+      
+      # 添加到结果数据框
+      results <- rbind(results, data.frame(
+        Variable = var,
+        r = round(test_result$estimate, 3),
+        p_value = round(test_result$p.value, 4),
+        CI_lower = round(test_result$conf.int[1], 3),
+        CI_upper = round(test_result$conf.int[2], 3),
+        Significance = sig_level,
+        stringsAsFactors = FALSE
+      ))
+    } else {
+      cat("警告: 变量", var, "不存在或全为NA值\n")
+    }
+  }
+  
+  # 按p值排序
+  results <- results[order(results$p_value), ]
+  
+  # 打印格式化的表格
+  cat("变量\t\t\tr\t\tp值\t\t95%CI\t\t\t显著性\n")
+  cat("-----------------------------------------------------------------------\n")
+  
+  for (i in 1:nrow(results)) {
+    cat(sprintf("%-20s\t%.3f\t\t%.4f\t\t[%.3f, %.3f]\t\t%s\n",
+                results$Variable[i],
+                results$r[i],
+                results$p_value[i],
+                results$CI_lower[i],
+                results$CI_upper[i],
+                results$Significance[i]))
+  }
+  
+  # 显著结果总结
+  sig_results <- results[results$Significance != "ns", ]
+  if (nrow(sig_results) > 0) {
+    cat("\n显著相关结果:\n")
+    for (i in 1:nrow(sig_results)) {
+      direction <- ifelse(sig_results$r[i] > 0, "正相关", "负相关")
+      cat(sprintf("- %s: %s (r = %.3f, p = %.4f)\n", 
+                  sig_results$Variable[i], direction, 
+                  sig_results$r[i], sig_results$p_value[i]))
+    }
+  } else {
+    cat("\n没有发现显著相关关系\n")
+  }
+  
+  return(results)
+}
+
+# 对所有组进行分析
+all_results <- list()
+
+for (group_name in names(groups)) {
+  all_results[[group_name]] <- perform_correlation_analysis(groups[[group_name]], group_name)
+}
+
+# 生成总结报告
+cat("\n\n=== 总结报告 ===\n")
+cat("各组显著相关结果汇总:\n\n")
+
+for (group_name in names(all_results)) {
+  results <- all_results[[group_name]]
+  sig_results <- results[results$Significance != "ns", ]
+  
+  cat(group_name, "组 (n=", nrow(groups[[group_name]]), "):\n", sep="")
+  
+  if (nrow(sig_results) > 0) {
+    for (i in 1:nrow(sig_results)) {
+      cat(sprintf("  - %s: r = %.3f, p = %.4f %s\n", 
+                  sig_results$Variable[i], 
+                  sig_results$r[i], 
+                  sig_results$p_value[i],
+                  sig_results$Significance[i]))
+    }
+  } else {
+    cat("  - 无显著相关\n")
+  }
+  cat("\n")
+}
+
+# 可选：创建一个汇总矩阵显示所有相关系数
+cat("=== 相关系数矩阵 (所有组) ===\n")
+summary_matrix <- matrix(nrow = length(variables), ncol = length(groups))
+rownames(summary_matrix) <- variables
+colnames(summary_matrix) <- names(groups)
+
+for (group_name in names(all_results)) {
+  results <- all_results[[group_name]]
+  for (i in 1:nrow(results)) {
+    var_name <- results$Variable[i]
+    summary_matrix[var_name, group_name] <- results$r[i]
+  }
+}
+
+print(round(summary_matrix, 3))
+
+# 显著性标记说明
+cat("\n\n显著性标记说明:\n")
+cat("*** p < 0.001\n")
+cat("**  p < 0.01\n")
+cat("*   p < 0.05\n")
+cat("ns  p ≥ 0.05 (不显著)\n")
+```
+```{r}
+# 加载必要的包
+library(lme4)
+library(lmerTest)  
+library(emmeans)   
+library(sjPlot)    
+library(performance) 
+
+# 准备数据
+Th <- result_Th %>%
+  select(No, order, gender, condition, RT_mean)
+
+# 确保因子变量正确编码
+Th$No <- as.factor(Th$No)
+Th$order <- as.factor(Th$order)
+Th$gender <- as.factor(Th$gender)
+Th$condition <- as.factor(Th$condition)
+
+# 建立线性混合模型
+# No作为随机效应(被试内变量)
+# order和gender作为被试间固定效应
+# condition作为被试内固定效应
+model0 <- lmer(RT_mean ~ order * gender * condition + (1|No), 
+              data = Th,
+              REML = TRUE)
+
+model1 <- lmer(RT_mean ~ order + gender + condition + order:condition + (1|No), 
+                    data = Th, REML = TRUE)
+
+model2 <- lmer(RT_mean ~ order + condition + order:condition + (1|No), 
+                    data = Th, REML = TRUE)
+anova(model0,model1,model2)
+summary(model2)
+```
+
+
+```{r}
+result_new <- result_Th %>%
+  # 按No分组
+  group_by(No) %>%
+  # 将condition相关的列进行透视
+  pivot_wider(
+    names_from = condition,
+    values_from = c(Threshold, Width, Slope, RT_mean),
+    names_sep = "_"
+  ) %>%
+  # 取消分组
+  ungroup() %>%
+  # 添加三个模式判断列
+  mutate(
+    # Threshold模式判断
+    Threshold_pattern = case_when(
+      order == "uf" ~ case_when(
+        Threshold_u1 < Threshold_f & Threshold_f < Threshold_u2 ~ "uu",
+        Threshold_u1 > Threshold_f & Threshold_f < Threshold_u2 ~ "du", 
+        Threshold_u1 > Threshold_f & Threshold_f > Threshold_u2 ~ "dd",
+        Threshold_u1 < Threshold_f & Threshold_f > Threshold_u2 ~ "ud",
+        TRUE ~ "other"
+      ),
+      order == "fu" ~ case_when(
+        Threshold_f < Threshold_u1 & Threshold_u1 < Threshold_u2 ~ "uu",
+        Threshold_f > Threshold_u1 & Threshold_u1 < Threshold_u2 ~ "du",
+        Threshold_f > Threshold_u1 & Threshold_u1 > Threshold_u2 ~ "dd", 
+        Threshold_f < Threshold_u1 & Threshold_u1 > Threshold_u2 ~ "ud",
+        TRUE ~ "other"
+      ),
+      TRUE ~ "unknown_order"
+    ),
+    
+    # Width模式判断
+    Width_pattern = case_when(
+      order == "uf" ~ case_when(
+        Width_u1 < Width_f & Width_f < Width_u2 ~ "uu",
+        Width_u1 > Width_f & Width_f < Width_u2 ~ "du",
+        Width_u1 > Width_f & Width_f > Width_u2 ~ "dd",
+        Width_u1 < Width_f & Width_f > Width_u2 ~ "ud",
+        TRUE ~ "other"
+      ),
+      order == "fu" ~ case_when(
+        Width_f < Width_u1 & Width_u1 < Width_u2 ~ "uu",
+        Width_f > Width_u1 & Width_u1 < Width_u2 ~ "du",
+        Width_f > Width_u1 & Width_u1 > Width_u2 ~ "dd",
+        Width_f < Width_u1 & Width_u1 > Width_u2 ~ "ud",
+        TRUE ~ "other"
+      ),
+      TRUE ~ "unknown_order"
+    ),
+    
+    # RT_mean模式判断  
+    RT_mean_pattern = case_when(
+      order == "uf" ~ case_when(
+        RT_mean_u1 < RT_mean_f & RT_mean_f < RT_mean_u2 ~ "uu",
+        RT_mean_u1 > RT_mean_f & RT_mean_f < RT_mean_u2 ~ "du",
+        RT_mean_u1 > RT_mean_f & RT_mean_f > RT_mean_u2 ~ "dd",
+        RT_mean_u1 < RT_mean_f & RT_mean_f > RT_mean_u2 ~ "ud", 
+        TRUE ~ "other"
+      ),
+      order == "fu" ~ case_when(
+        RT_mean_f < RT_mean_u1 & RT_mean_u1 < RT_mean_u2 ~ "uu",
+        RT_mean_f > RT_mean_u1 & RT_mean_u1 < RT_mean_u2 ~ "du",
+        RT_mean_f > RT_mean_u1 & RT_mean_u1 > RT_mean_u2 ~ "dd",
+        RT_mean_f < RT_mean_u1 & RT_mean_u1 > RT_mean_u2 ~ "ud",
+        TRUE ~ "other"
+      ),
+      TRUE ~ "unknown_order"
+    ),
+    
+    # 添加三个数组列，每个包含两个差值参数
+    # Threshold差值数组 [第一段差值, 第二段差值]
+    Threshold_diffs = case_when(
+      order == "uf" ~ paste0("[", round(Threshold_f - Threshold_u1, 4), ", ", round(Threshold_u2 - Threshold_f, 4), "]"),
+      order == "fu" ~ paste0("[", round(Threshold_u1 - Threshold_f, 4), ", ", round(Threshold_u2 - Threshold_u1, 4), "]"),
+      TRUE ~ "[NA, NA]"
+    ),
+    
+    # Width差值数组 [第一段差值, 第二段差值] 
+    Width_diffs = case_when(
+      order == "uf" ~ paste0("[", round(Width_f - Width_u1, 4), ", ", round(Width_u2 - Width_f, 4), "]"),
+      order == "fu" ~ paste0("[", round(Width_u1 - Width_f, 4), ", ", round(Width_u2 - Width_u1, 4), "]"),
+      TRUE ~ "[NA, NA]"
+    ),
+    
+    # RT_mean差值数组 [第一段差值, 第二段差值]
+    RT_mean_diffs = case_when(
+      order == "uf" ~ paste0("[", round(RT_mean_f - RT_mean_u1, 4), ", ", round(RT_mean_u2 - RT_mean_f, 4), "]"),
+      order == "fu" ~ paste0("[", round(RT_mean_u1 - RT_mean_f, 4), ", ", round(RT_mean_u2 - RT_mean_u1, 4), "]"),
+      TRUE ~ "[NA, NA]"
+    )
+  )
+```
+
+
+```{r}
+# 输出到CSV文件
+write.csv(result_new, "result_Th_reshaped.csv", row.names = FALSE, fileEncoding = "UTF-8")
+print("数据已保存到: result_Th_reshaped.csv")
+```
+
+
+```{r}
+library(dplyr)
+library(stringr)
+
+Th_diffs <- result_new %>%
+  select(No, AQ, Threshold_diffs,social,attention_switching,	local_attention,	communication,	imagination,Friendship,PI20) %>%
+  mutate(
+    # 移除方括号并按逗号分割
+    Threshold_diff1 = as.numeric(str_extract(Threshold_diffs, "(?<=\\[)[^,]+")),
+    Threshold_diff2 = as.numeric(str_extract(Threshold_diffs, "(?<=,\\s)[^\\]]+"))
+  ) %>%
+  select(No, AQ, Threshold_diff1, Threshold_diff2,social,attention_switching,	local_attention,	communication,	imagination,Friendship,PI20)
+
+cor.test(Th_diffs$AQ,Th_diffs$Threshold_diff1)
+cor.test(Th_diffs$AQ,Th_diffs$Threshold_diff2)
+cor.test(Th_diffs$social,Th_diffs$Threshold_diff1)
+cor.test(Th_diffs$social,Th_diffs$Threshold_diff2)
+cor.test(Th_diffs$attention_switching,Th_diffs$Threshold_diff1)
+cor.test(Th_diffs$attention_switching,Th_diffs$Threshold_diff2)
+cor.test(Th_diffs$local_attention,Th_diffs$Threshold_diff1)
+cor.test(Th_diffs$local_attention,Th_diffs$Threshold_diff2)
+cor.test(Th_diffs$communication,Th_diffs$Threshold_diff1)
+cor.test(Th_diffs$communication,Th_diffs$Threshold_diff2)
+cor.test(Th_diffs$imagination,Th_diffs$Threshold_diff1)
+cor.test(Th_diffs$imagination,Th_diffs$Threshold_diff2)
+cor.test(Th_diffs$Friendship,Th_diffs$Threshold_diff1)
+cor.test(Th_diffs$Friendship,Th_diffs$Threshold_diff2)
+cor.test(Th_diffs$PI20,Th_diffs$Threshold_diff1)
+cor.test(Th_diffs$PI20,Th_diffs$Threshold_diff2)
+```
+
+```{r}
+library(dplyr)
+library(stringr)
+Th_diffs <- result_new %>%
+  select(No, AQ, Width_diffs,social,attention_switching, local_attention, communication, imagination,Friendship,PI20) %>%
+  mutate(
+    # 移除方括号并按逗号分割
+    Width_diff1 = as.numeric(str_extract(Width_diffs, "(?<=\\[)[^,]+")),
+    Width_diff2 = as.numeric(str_extract(Width_diffs, "(?<=,\\s)[^\\]]+"))
+  ) %>%
+  select(No, AQ, Width_diff1, Width_diff2,social,attention_switching, local_attention, communication, imagination,Friendship,PI20)
+cor.test(Th_diffs$AQ,Th_diffs$Width_diff1)
+cor.test(Th_diffs$AQ,Th_diffs$Width_diff2)
+cor.test(Th_diffs$social,Th_diffs$Width_diff1)
+cor.test(Th_diffs$social,Th_diffs$Width_diff2)
+cor.test(Th_diffs$attention_switching,Th_diffs$Width_diff1)
+cor.test(Th_diffs$attention_switching,Th_diffs$Width_diff2)
+cor.test(Th_diffs$local_attention,Th_diffs$Width_diff1)
+cor.test(Th_diffs$local_attention,Th_diffs$Width_diff2)
+cor.test(Th_diffs$communication,Th_diffs$Width_diff1)
+cor.test(Th_diffs$communication,Th_diffs$Width_diff2)
+cor.test(Th_diffs$imagination,Th_diffs$Width_diff1)
+cor.test(Th_diffs$imagination,Th_diffs$Width_diff2)
+cor.test(Th_diffs$Friendship,Th_diffs$Width_diff1)
+cor.test(Th_diffs$Friendship,Th_diffs$Width_diff2)
+cor.test(Th_diffs$PI20,Th_diffs$Width_diff1)
+cor.test(Th_diffs$PI20,Th_diffs$Width_diff2)
+```
+```{r}
+# 创建分组变量
+result_new$group <- paste(result_new$order, result_new$gender, sep = "_")
+result_new$group2 <- paste(result_new$order)
+
+# 分组
+grouped_list <- split(result_new, result_new$group)
+grouped_list2 <- split(result_new, result_new$group2)
+
+# 访问各组
+uf_f <- grouped_list$uf_f  # order=uf, gender=f
+uf_m <- grouped_list$uf_m  # order=uf, gender=m
+fu_f <- grouped_list$fu_f  # order=fu, gender=f
+fu_m <- grouped_list$fu_m  # order=fu, gender=m
+
+fu <- grouped_list2$fu
+uf <- grouped_list2$uf
+```
+
+```{r}
+# 抑制geom_smooth的警告信息
+options(warn = -1)  # 临时抑制警告
+
+# 定义一个函数来进行相关性分析并生成图表
+create_correlation_plot <- function(data, x_var, y_var, x_label, y_label) {
+  # 进行相关性检验
+  cor_result <- cor.test(data[[x_var]], data[[y_var]])
+  
+  # 打印相关性结果
+  cat("\n=== ", x_label, " vs ", y_label, " ===\n")
+  cat("Correlation coefficient (r):", round(cor_result$estimate, 4), "\n")
+  cat("95% Confidence Interval:", round(cor_result$conf.int, 4), "\n")
+  cat("t-statistic:", round(cor_result$statistic, 4), "\n")
+  cat("p-value:", format(cor_result$p.value, scientific = TRUE), "\n")
+  cat("Significance:", ifelse(cor_result$p.value < 0.001, "***", 
+                            ifelse(cor_result$p.value < 0.01, "**",
+                                  ifelse(cor_result$p.value < 0.05, "*", "ns"))), "\n")
+  
+  # 格式化p值显示
+  p_formatted <- if(cor_result$p.value < 0.001) {
+    "< 0.001"
+  } else if(cor_result$p.value < 0.01) {
+    sprintf("= %.3f", cor_result$p.value)
+  } else {
+    sprintf("= %.3f", cor_result$p.value)
+  }
+  
+  # 创建散点图
+  p <- ggplot(data, aes_string(x = x_var, y = y_var)) +
+    geom_point(alpha = 0.6, size = 2.5, color = "steelblue") +
+    geom_smooth(method = "lm", se = TRUE, color = "red", alpha = 0.3, formula = y ~ x) +
+    labs(
+      x = x_label,
+      y = y_label,
+      title = paste("Correlation:", x_label, "vs", y_label),
+      subtitle = paste("r =", round(cor_result$estimate, 3), 
+                      ", p", p_formatted,
+                      ifelse(cor_result$p.value < 0.001, " ***", 
+                            ifelse(cor_result$p.value < 0.01, " **",
+                                  ifelse(cor_result$p.value < 0.05, " *", ""))))
+    ) +
+    theme_minimal() +
+    theme(
+      plot.title = element_text(size = 12, face = "bold"),
+      plot.subtitle = element_text(size = 10, color = "gray50"),
+      axis.title = element_text(size = 11),
+      axis.text = element_text(size = 10)
+    )
+  
+  return(list(plot = p, correlation = cor_result))
+}
+
+library(dplyr)
+library(stringr)
+library(ggplot2)
+
+# Data preprocessing
+Th_diffs <- uf_f %>%
+  select(No, AQ, Threshold_diffs, social, attention_switching, local_attention, 
+         communication, imagination, Friendship, PI20) %>%
+  mutate(
+    # Remove brackets and split by comma
+    Threshold_diff1 = as.numeric(str_extract(Threshold_diffs, "(?<=\\[)[^,]+")),
+    Threshold_diff2 = as.numeric(str_extract(Threshold_diffs, "(?<=,\\s)[^\\]]+"))
+  ) %>%
+  select(No, AQ, Threshold_diff1, Threshold_diff2, social, attention_switching, 
+         local_attention, communication, imagination, Friendship, PI20)
+
+# Define variables and labels
+variables <- c("AQ", "social", "attention_switching", "local_attention", 
+               "communication", "imagination", "Friendship", "PI20")
+labels <- c("Autism Quotient (AQ)", "Social Skills", "Attention Switching", "Local Attention", 
+            "Communication", "Imagination", "Friendship Quality", "PI20")
+
+# Create lists to store results
+results_diff1 <- list()
+results_diff2 <- list()
+
+# Correlation analysis for Threshold_diff1
+cat("========== Threshold_diff1 Correlation Analysis ==========\n")
+for(i in 1:length(variables)) {
+  results_diff1[[i]] <- create_correlation_plot(
+    data = Th_diffs,
+    x_var = variables[i],
+    y_var = "Threshold_diff1",
+    x_label = labels[i],
+    y_label = "Threshold Difference 1"
+  )
+}
+
+# Correlation analysis for Threshold_diff2
+cat("\n========== Threshold_diff2 Correlation Analysis ==========\n")
+for(i in 1:length(variables)) {
+  results_diff2[[i]] <- create_correlation_plot(
+    data = Th_diffs,
+    x_var = variables[i],
+    y_var = "Threshold_diff2",
+    x_label = labels[i],
+    y_label = "Threshold Difference 2"
+  )
+}
+
+# Display all plots - Threshold_diff1
+cat("\n========== Displaying Threshold_diff1 Plots ==========\n")
+for(i in 1:length(variables)) {
+  print(results_diff1[[i]]$plot)
+}
+
+# Display all plots - Threshold_diff2
+cat("\n========== Displaying Threshold_diff2 Plots ==========\n")
+for(i in 1:length(variables)) {
+  print(results_diff2[[i]]$plot)
+}
+
+# Create summary table
+create_summary_table <- function(results, threshold_name) {
+  summary_df <- data.frame(
+    Variable = labels,
+    r = sapply(results, function(x) round(x$correlation$estimate, 4)),
+    p_value = sapply(results, function(x) x$correlation$p.value),
+    CI_lower = sapply(results, function(x) round(x$correlation$conf.int[1], 4)),
+    CI_upper = sapply(results, function(x) round(x$correlation$conf.int[2], 4)),
+    Significance = sapply(results, function(x) {
+      p <- x$correlation$p.value
+      ifelse(p < 0.001, "***", 
+             ifelse(p < 0.01, "**",
+                    ifelse(p < 0.05, "*", "ns")))
+    })
+  )
+  
+  cat("\n========== ", threshold_name, " Correlation Summary Table ==========\n")
+  print(summary_df)
+  return(summary_df)
+}
+
+# Generate summary tables
+summary_diff1 <- create_summary_table(results_diff1, "Threshold_diff1")
+summary_diff2 <- create_summary_table(results_diff2, "Threshold_diff2")
+
+# Optional: Save results to files
+# write.csv(summary_diff1, "threshold_diff1_correlations.csv", row.names = FALSE)
+# write.csv(summary_diff2, "threshold_diff2_correlations.csv", row.names = FALSE)
+
+# Optional: Save all plots to PDF file
+# pdf("correlation_plots.pdf", width = 10, height = 8)
+# for(i in 1:length(variables)) {
+#   print(results_diff1[[i]]$plot)
+#   print(results_diff2[[i]]$plot)
+# }
+# dev.off()
+
+# Restore warning settings
+options(warn = 0)
+
+
+```
+```{r}
+library(dplyr)
+library(stringr)
+library(ggplot2)
+
+# Data preprocessing
+Width_diffs <- uf %>%
+  select(No, AQ, Width_diffs, social, attention_switching, local_attention, 
+         communication, imagination, Friendship, PI20) %>%
+  mutate(
+    # Remove brackets and split by comma
+    Width_diff1 = as.numeric(str_extract(Width_diffs, "(?<=\\[)[^,]+")),
+    Width_diff2 = as.numeric(str_extract(Width_diffs, "(?<=,\\s)[^\\]]+"))
+  ) %>%
+  select(No, AQ, Width_diff1, Width_diff2, social, attention_switching, 
+         local_attention, communication, imagination, Friendship, PI20)
+
+# Define variables and labels
+variables <- c("AQ", "social", "attention_switching", "local_attention", 
+               "communication", "imagination", "Friendship", "PI20")
+labels <- c("Autism Quotient (AQ)", "Social Skills", "Attention Switching", "Local Attention", 
+            "Communication", "Imagination", "Friendship Quality", "PI20")
+
+# Create lists to store results
+results_diff1 <- list()
+results_diff2 <- list()
+
+# Correlation analysis for Width_diff1
+cat("========== Width_diff1 Correlation Analysis ==========\n")
+for(i in 1:length(variables)) {
+  results_diff1[[i]] <- create_correlation_plot(
+    data = Width_diffs,
+    x_var = variables[i],
+    y_var = "Width_diff1",
+    x_label = labels[i],
+    y_label = "Width Difference 1"
+  )
+}
+
+# Correlation analysis for Width_diff2
+cat("\n========== Width_diff2 Correlation Analysis ==========\n")
+for(i in 1:length(variables)) {
+  results_diff2[[i]] <- create_correlation_plot(
+    data = Width_diffs,
+    x_var = variables[i],
+    y_var = "Width_diff2",
+    x_label = labels[i],
+    y_label = "Width Difference 2"
+  )
+}
+
+# Display all plots - Width_diff1
+cat("\n========== Displaying Width_diff1 Plots ==========\n")
+for(i in 1:length(variables)) {
+  print(results_diff1[[i]]$plot)
+}
+
+# Display all plots - Width_diff2
+cat("\n========== Displaying Width_diff2 Plots ==========\n")
+for(i in 1:length(variables)) {
+  print(results_diff2[[i]]$plot)
+}
+
+# Create summary table
+create_summary_table <- function(results, width_name) {
+  summary_df <- data.frame(
+    Variable = labels,
+    r = sapply(results, function(x) round(x$correlation$estimate, 4)),
+    p_value = sapply(results, function(x) x$correlation$p.value),
+    CI_lower = sapply(results, function(x) round(x$correlation$conf.int[1], 4)),
+    CI_upper = sapply(results, function(x) round(x$correlation$conf.int[2], 4)),
+    Significance = sapply(results, function(x) {
+      p <- x$correlation$p.value
+      ifelse(p < 0.001, "***", 
+             ifelse(p < 0.01, "**",
+                    ifelse(p < 0.05, "*", "ns")))
+    })
+  )
+  
+  cat("\n========== ", width_name, " Correlation Summary Table ==========\n")
+  print(summary_df)
+  return(summary_df)
+}
+
+# Generate summary tables
+summary_diff1 <- create_summary_table(results_diff1, "Width_diff1")
+summary_diff2 <- create_summary_table(results_diff2, "Width_diff2")
+
+# Optional: Save results to files
+# write.csv(summary_diff1, "width_diff1_correlations.csv", row.names = FALSE)
+# write.csv(summary_diff2, "width_diff2_correlations.csv", row.names = FALSE)
+
+# Optional: Save all plots to PDF file
+# pdf("correlation_plots.pdf", width = 10, height = 8)
+# for(i in 1:length(variables)) {
+#   print(results_diff1[[i]]$plot)
+#   print(results_diff2[[i]]$plot)
+# }
+# dev.off()
+
+# Restore warning settings
+options(warn = 0)
+```
+
+
+
+```{r}
+#uf_f <- grouped_list$uf_f  # order=uf, gender=f
+#uf_m <- grouped_list$uf_m  # order=uf, gender=m
+#fu_f <- grouped_list$fu_f  # order=fu, gender=f
+#fu_m <- grouped_list$fu_m  # order=fu, gender=m
+library(dplyr)
+library(stringr)
+Th_diffs <- fu_m%>%
+  select(No, AQ, Width_diffs,social,attention_switching, local_attention, communication, imagination,Friendship,PI20) %>%
+  mutate(
+    # 移除方括号并按逗号分割
+    Width_diff1 = as.numeric(str_extract(Width_diffs, "(?<=\\[)[^,]+")),
+    Width_diff2 = as.numeric(str_extract(Width_diffs, "(?<=,\\s)[^\\]]+"))
+  ) %>%
+  select(No, AQ, Width_diff1, Width_diff2,social,attention_switching, local_attention, communication, imagination,Friendship,PI20)
+cor.test(Th_diffs$AQ,Th_diffs$Width_diff1)
+cor.test(Th_diffs$AQ,Th_diffs$Width_diff2)
+cor.test(Th_diffs$social,Th_diffs$Width_diff1)
+cor.test(Th_diffs$social,Th_diffs$Width_diff2)
+cor.test(Th_diffs$attention_switching,Th_diffs$Width_diff1)
+cor.test(Th_diffs$attention_switching,Th_diffs$Width_diff2)
+cor.test(Th_diffs$local_attention,Th_diffs$Width_diff1)
+cor.test(Th_diffs$local_attention,Th_diffs$Width_diff2)
+cor.test(Th_diffs$communication,Th_diffs$Width_diff1)
+cor.test(Th_diffs$communication,Th_diffs$Width_diff2)
+cor.test(Th_diffs$imagination,Th_diffs$Width_diff1)
+cor.test(Th_diffs$imagination,Th_diffs$Width_diff2)
+cor.test(Th_diffs$Friendship,Th_diffs$Width_diff1)
+cor.test(Th_diffs$Friendship,Th_diffs$Width_diff2)
+cor.test(Th_diffs$PI20,Th_diffs$Width_diff1)
+cor.test(Th_diffs$PI20,Th_diffs$Width_diff2)
+```
+
+```{r}
+#result_look <- subset(result_Th, look != "#N/A")
+#result_look$look <- as.numeric(result_look$look)
+
+#mean_look <- mean(result_look$look, na.rm = TRUE)
+#sd_look <- sd(result_look$look, na.rm = TRUE)
+
+# 计算3倍标准差的上下界
+#lower_bound <- mean_look - 3 * sd_look
+#upper_bound <- mean_look + 3 * sd_look
+
+# 创建新数据集，去除3SD之外的行
+result_look <- result_Th
+```
+
+```{r}
+result_look_clean <- subset(result_look, look_5080 != "#N/A")
+result_look_clean <- subset(result_look, look_other != "#N/A")
+group_uf <- subset(result_look_clean, order == "uf")  # uf
+group_fu <- subset(result_look_clean, order == "fu")  # uf
+result <- t.test(as.numeric(result_look_clean$look_5080), as.numeric(result_look_clean$look_other), paired = TRUE)
+print(result)
+result1 <- t.test(as.numeric(result_look_clean$look_100), as.numeric(result_look_clean$look_0), paired = TRUE)
+print(result1)
+cor.test(result_look_clean$AQ,as.numeric(result_look_clean$look_100)-as.numeric(result_look_clean$look_0))
+```
+
+```{r}
+# 输出到CSV文件
+write.csv(result_look_clean, "result_look_clean.csv", row.names = FALSE, fileEncoding = "UTF-8")
+print("数据已保存到: result_look_clean.csv")
+```
+```{r}
+# 创建参与者-条件计数矩阵
+participant_condition_count <- table(result_look_clean$No, result_look_clean$condition)
+
+# 找出在所有3个condition都有数据的参与者
+complete_participants <- names(which(rowSums(participant_condition_count > 0) == 3))
+
+# 筛选出完整数据
+result_look_complete <- result_look_clean[result_look_clean$No %in% complete_participants, ]
+
+cat("原始数据中的参与者数量:", length(unique(result_look_clean$No)), "\n")
+cat("完整数据中的参与者数量:", length(complete_participants), "\n")
+cat("每个condition的观测数量:\n")
+print(table(result_look_complete$condition))
+```
+
+
+```{r}
+# 加载必要的包
+library(ggplot2)
+library(gridExtra)
+library(dplyr)
+
+# 抑制geom_smooth的警告信息
+options(warn = -1)  # 临时抑制警告
+
+# 定义一个函数来进行相关性分析并生成图表
+create_correlation_plot <- function(data, x_var, y_var, x_label, y_label) {
+  # 进行相关性检验
+  cor_result <- cor.test(data[[x_var]], data[[y_var]])
+  
+  # 打印相关性结果
+  cat("\n=== ", x_label, " vs ", y_label, " ===\n")
+  cat("Correlation coefficient (r):", round(cor_result$estimate, 4), "\n")
+  cat("95% Confidence Interval:", round(cor_result$conf.int, 4), "\n")
+  cat("t-statistic:", round(cor_result$statistic, 4), "\n")
+  cat("p-value:", format(cor_result$p.value, scientific = TRUE), "\n")
+  cat("Significance:", ifelse(cor_result$p.value < 0.001, "***", 
+                            ifelse(cor_result$p.value < 0.01, "**",
+                                  ifelse(cor_result$p.value < 0.05, "*", "ns"))), "\n")
+  
+  # 格式化p值显示
+  p_formatted <- if(cor_result$p.value < 0.001) {
+    "< 0.001"
+  } else if(cor_result$p.value < 0.01) {
+    sprintf("= %.3f", cor_result$p.value)
+  } else {
+    sprintf("= %.3f", cor_result$p.value)
+  }
+  
+  # 创建散点图
+  p <- ggplot(data, aes_string(x = x_var, y = y_var)) +
+    geom_point(alpha = 0.6, size = 2.5, color = "steelblue") +
+    geom_smooth(method = "lm", se = TRUE, color = "red", alpha = 0.3, formula = y ~ x) +
+    labs(
+      x = x_label,
+      y = y_label,
+      title = paste("Correlation:", x_label, "vs", y_label),
+      subtitle = paste("r =", round(cor_result$estimate, 3), 
+                      ", p", p_formatted,
+                      ifelse(cor_result$p.value < 0.001, " ***", 
+                            ifelse(cor_result$p.value < 0.01, " **",
+                                  ifelse(cor_result$p.value < 0.05, " *", ""))))
+    ) +
+    theme_minimal() +
+    theme(
+      plot.title = element_text(size = 12, face = "bold"),
+      plot.subtitle = element_text(size = 10, color = "gray50"),
+      axis.title = element_text(size = 11),
+      axis.text = element_text(size = 10)
+    )
+  
+  return(list(plot = p, correlation = cor_result))
+}
+
+# 进行所有相关性分析并生成图表
+correlations <- list()
+
+# 1. AQ vs look
+result1 <- create_correlation_plot(result_look_complete, "AQ", "look", "AQ Score", "Look Behavior")
+correlations$AQ <- result1
+
+# 2. social vs look
+result2 <- create_correlation_plot(result_look_complete, "social", "look", "Social Score", "Look Behavior")
+correlations$social <- result2
+
+# 3. attention_switching vs look
+result3 <- create_correlation_plot(result_look_complete, "attention_switching", "look", "Attention Switching", "Look Behavior")
+correlations$attention_switching <- result3
+
+# 4. local_attention vs look
+result4 <- create_correlation_plot(result_look_complete, "local_attention", "look", "Local Attention", "Look Behavior")
+correlations$local_attention <- result4
+
+# 5. communication vs look
+result5 <- create_correlation_plot(result_look_complete, "communication", "look", "Communication", "Look Behavior")
+correlations$communication <- result5
+
+# 6. imagination vs look
+result6 <- create_correlation_plot(result_look_complete, "imagination", "look", "Imagination", "Look Behavior")
+correlations$imagination <- result6
+
+# 7. PI20 vs look
+result7 <- create_correlation_plot(result_look_complete, "PI20", "look", "PI20 Score", "Look Behavior")
+correlations$PI20 <- result7
+
+# 8. Friendship vs look
+result8 <- create_correlation_plot(result_look_complete, "Friendship", "look", "Friendship Score", "Look Behavior")
+correlations$Friendship <- result8
+
+# 提取所有图表
+plots <- lapply(correlations, function(x) x$plot)
+
+# 在RStudio中单独显示每个图表
+cat("\n=== DISPLAYING INDIVIDUAL PLOTS ===\n")
+
+# 1. AQ vs look
+cat("Displaying Plot 1: AQ Score vs Look Behavior\n")
+print(plots$AQ)
+
+# 2. social vs look  
+cat("Displaying Plot 2: Social Score vs Look Behavior\n")
+print(plots$social)
+
+# 3. attention_switching vs look
+cat("Displaying Plot 3: Attention Switching vs Look Behavior\n")
+print(plots$attention_switching)
+
+# 4. local_attention vs look
+cat("Displaying Plot 4: Local Attention vs Look Behavior\n")
+print(plots$local_attention)
+
+# 5. communication vs look
+cat("Displaying Plot 5: Communication vs Look Behavior\n")
+print(plots$communication)
+
+# 6. imagination vs look
+cat("Displaying Plot 6: Imagination vs Look Behavior\n")
+print(plots$imagination)
+
+# 7. PI20 vs look
+cat("Displaying Plot 7: PI20 Score vs Look Behavior\n")
+print(plots$PI20)
+
+# 8. Friendship vs look
+cat("Displaying Plot 8: Friendship Score vs Look Behavior\n")
+print(plots$Friendship)
+
+# 可选：如果需要保存单独的图表文件
+save_individual_plots <- TRUE  # 设置为FALSE如果不需要保存
+
+if(save_individual_plots) {
+  cat("\n=== SAVING INDIVIDUAL PLOTS ===\n")
+  
+  # 保存每个图表为单独的PNG文件
+  ggsave("plot_AQ_vs_look.png", plots$AQ, width = 8, height = 6, dpi = 300)
+  ggsave("plot_social_vs_look.png", plots$social, width = 8, height = 6, dpi = 300)
+  ggsave("plot_attention_switching_vs_look.png", plots$attention_switching, width = 8, height = 6, dpi = 300)
+  ggsave("plot_local_attention_vs_look.png", plots$local_attention, width = 8, height = 6, dpi = 300)
+  ggsave("plot_communication_vs_look.png", plots$communication, width = 8, height = 6, dpi = 300)
+  ggsave("plot_imagination_vs_look.png", plots$imagination, width = 8, height = 6, dpi = 300)
+  ggsave("plot_PI20_vs_look.png", plots$PI20, width = 8, height = 6, dpi = 300)
+  ggsave("plot_friendship_vs_look.png", plots$Friendship, width = 8, height = 6, dpi = 300)
+  
+  cat("Individual plot files saved\n")
+}
+
+# 可选：创建组合图表（如果需要）
+create_combined_plot <- FALSE  # 设置为TRUE如果需要组合图表
+
+if(create_combined_plot) {
+  # 创建2x4的网格布局
+  grid_plot <- grid.arrange(grobs = plots, ncol = 2, nrow = 4,
+                           top = "Correlation Analysis: Various Measures vs Look Behavior")
+  
+  # 保存组合图表
+  ggsave("correlation_analysis_grid.png", grid_plot, width = 12, height = 16, dpi = 300)
+  cat("Combined grid plot saved as correlation_analysis_grid.png\n")
+}
+
+# 创建相关性系数汇总表
+correlation_summary <- data.frame(
+  Variable = names(correlations),
+  Correlation = sapply(correlations, function(x) round(x$correlation$estimate, 4)),
+  P_value = sapply(correlations, function(x) format(x$correlation$p.value, scientific = TRUE)),
+  Significance = sapply(correlations, function(x) {
+    p_val <- x$correlation$p.value
+    ifelse(p_val < 0.001, "***", 
+           ifelse(p_val < 0.01, "**",
+                  ifelse(p_val < 0.05, "*", "ns")))
+  }),
+  CI_lower = sapply(correlations, function(x) round(x$correlation$conf.int[1], 4)),
+  CI_upper = sapply(correlations, function(x) round(x$correlation$conf.int[2], 4))
+)
+
+print("\n=== CORRELATION SUMMARY TABLE ===")
+print(correlation_summary)
+
+# 保存汇总表
+write.csv(correlation_summary, "correlation_summary.csv", row.names = FALSE)
+
+cat("\n=== ANALYSIS COMPLETE ===\n")
+cat("Individual plots created and combined into grid layout\n")
+cat("Files saved:\n")
+cat("- correlation_analysis_grid.png (combined plot)\n")
+cat("- correlation_summary.csv (summary table)\n")
+
+# 恢复警告设置
+options(warn = 0)
+```
+```{r}
+# 数据预处理：去除#N/A值并转换为数值型
+result_look <- subset(result_Th, look_0 != "#N/A")
+result_look <- subset(result_look, look_100 != "#N/A")
+result_look <- subset(result_look, look_5080 != "#N/A")
+result_look <- subset(result_look, look_100m0 != "#N/A")
+
+result_look$look_0 <- as.numeric(result_look$look_0)
+result_look$look_100 <- as.numeric(result_look$look_100)
+result_look$look_5080 <- as.numeric(result_look$look_5080)
+result_look$look_100m0 <- as.numeric(result_look$look_100m0)
+
+group_uf_f <- subset(result_look, order == "uf" & gender == "f")  # uf + female
+group_uf_m <- subset(result_look, order == "uf" & gender == "m")  # uf + male
+group_fu_f <- subset(result_look, order == "fu" & gender == "f")  # fu + female
+group_fu_m <- subset(result_look, order == "fu" & gender == "m")  # fu + male
+```
+
+```{r}
+# 加载必要的包
+library(ggplot2)
+library(gridExtra)
+library(dplyr)
+
+# 抑制geom_smooth的警告信息
+options(warn = -1)  # 临时抑制警告
+
+# 定义一个函数来进行3SD异常值去除
+remove_outliers_3sd <- function(data, column_name) {
+  # 计算均值和标准差
+  mean_val <- mean(data[[column_name]], na.rm = TRUE)
+  sd_val <- sd(data[[column_name]], na.rm = TRUE)
+  
+  # 计算3SD边界
+  lower_bound <- mean_val - 3 * sd_val
+  upper_bound <- mean_val + 3 * sd_val
+  
+  # 筛选数据
+  clean_data <- data[data[[column_name]] >= lower_bound & 
+                     data[[column_name]] <= upper_bound, ]
+  
+  # 打印清理信息
+  cat("=== Outlier Removal for", column_name, "===\n")
+  cat("Original data points:", nrow(data), "\n")
+  cat("Mean:", round(mean_val, 4), "\n")
+  cat("SD:", round(sd_val, 4), "\n")
+  cat("Lower bound (Mean - 3SD):", round(lower_bound, 4), "\n")
+  cat("Upper bound (Mean + 3SD):", round(upper_bound, 4), "\n")
+  cat("Outliers removed:", nrow(data) - nrow(clean_data), "\n")
+  cat("Clean data points:", nrow(clean_data), "\n")
+  cat("Percentage retained:", round(nrow(clean_data)/nrow(data)*100, 2), "%\n\n")
+  
+  return(clean_data)
+}
+
+# 定义一个函数来进行相关性分析并生成图表
+create_correlation_plot <- function(data, x_var, y_var, x_label, y_label) {
+  # 进行相关性检验
+  cor_result <- cor.test(data[[x_var]], data[[y_var]])
+  
+  # 打印相关性结果
+  cat("\n=== ", x_label, " vs ", y_label, " ===\n")
+  cat("Correlation coefficient (r):", round(cor_result$estimate, 4), "\n")
+  cat("95% Confidence Interval:", round(cor_result$conf.int, 4), "\n")
+  cat("t-statistic:", round(cor_result$statistic, 4), "\n")
+  cat("p-value:", format(cor_result$p.value, scientific = TRUE), "\n")
+  cat("Significance:", ifelse(cor_result$p.value < 0.001, "***", 
+                            ifelse(cor_result$p.value < 0.01, "**",
+                                  ifelse(cor_result$p.value < 0.05, "*", "ns"))), "\n")
+  
+  # 格式化p值显示
+  p_formatted <- if(cor_result$p.value < 0.001) {
+    "< 0.001"
+  } else if(cor_result$p.value < 0.01) {
+    sprintf("= %.3f", cor_result$p.value)
+  } else {
+    sprintf("= %.3f", cor_result$p.value)
+  }
+  
+  # 创建散点图
+  p <- ggplot(data, aes_string(x = x_var, y = y_var)) +
+    geom_point(alpha = 0.6, size = 2.5, color = "steelblue") +
+    geom_smooth(method = "lm", se = TRUE, color = "red", alpha = 0.3, formula = y ~ x) +
+    labs(
+      x = x_label,
+      y = y_label,
+      title = paste("Correlation:", x_label, "vs", y_label),
+      subtitle = paste("r =", round(cor_result$estimate, 3), 
+                      ", p", p_formatted,
+                      ifelse(cor_result$p.value < 0.001, " ***", 
+                            ifelse(cor_result$p.value < 0.01, " **",
+                                  ifelse(cor_result$p.value < 0.05, " *", ""))))
+    ) +
+    theme_minimal() +
+    theme(
+      plot.title = element_text(size = 12, face = "bold"),
+      plot.subtitle = element_text(size = 10, color = "gray50"),
+      axis.title = element_text(size = 11),
+      axis.text = element_text(size = 10)
+    )
+  
+  return(list(plot = p, correlation = cor_result))
+}
+
+# 主函数：对指定的目标变量进行完整的相关性分析
+analyze_correlations <- function(data, target_var, target_label = NULL, 
+                                save_plots = TRUE, output_prefix = "plot") {
+  
+  # 如果没有提供标签，使用变量名
+  if(is.null(target_label)) {
+    target_label <- target_var
+  }
+  
+  # 首先对目标变量进行3SD异常值去除
+  cat("=== DATA CLEANING ===\n")
+  clean_data <- remove_outliers_3sd(data, target_var)
+  
+  
+  # 定义要分析的变量
+  analysis_vars <- c("AQ", "social", "attention_switching", "local_attention", 
+                     "communication", "imagination", "PI20", "Friendship")
+  
+  # 定义变量标签
+  var_labels <- c("AQ Score", "Social Score", "Attention Switching", "Local Attention",
+                  "Communication", "Imagination", "PI20 Score", "Friendship Score")
+  
+  # 进行所有相关性分析并生成图表
+  correlations <- list()
+  plots <- list()
+  
+  cat("\n=== CORRELATION ANALYSIS ===\n")
+  
+  for(i in 1:length(analysis_vars)) {
+    var_name <- analysis_vars[i]
+    var_label <- var_labels[i]
+    
+    # 检查变量是否存在于数据中
+    if(var_name %in% names(clean_data)) {
+      result <- create_correlation_plot(clean_data, var_name, target_var, 
+                                       var_label, target_label)
+      correlations[[var_name]] <- result
+      plots[[var_name]] <- result$plot
+    } else {
+      cat("Warning: Variable", var_name, "not found in data\n")
+    }
+  }
+  
+  # 在RStudio中单独显示每个图表
+  cat("\n=== DISPLAYING INDIVIDUAL PLOTS ===\n")
+  
+  for(i in 1:length(plots)) {
+    var_name <- names(plots)[i]
+    var_label <- var_labels[which(analysis_vars == var_name)]
+    cat("Displaying Plot", i, ":", var_label, "vs", target_label, "\n")
+    print(plots[[i]])
+  }
+  
+  # 保存图表文件
+  if(save_plots && length(plots) > 0) {
+    cat("\n=== SAVING INDIVIDUAL PLOTS ===\n")
+    
+    for(i in 1:length(plots)) {
+      var_name <- names(plots)[i]
+      filename <- paste0(output_prefix, "_", var_name, "_vs_", target_var, ".png")
+      ggsave(filename, plots[[i]], width = 8, height = 6, dpi = 300)
+      cat("Saved:", filename, "\n")
+    }
+  }
+  
+  # 创建汇总表
+  cat("\n=== CORRELATION SUMMARY ===\n")
+  summary_table <- data.frame(
+    Variable = names(correlations),
+    Correlation = sapply(correlations, function(x) round(x$correlation$estimate, 4)),
+    P_Value = sapply(correlations, function(x) x$correlation$p.value),
+    Significance = sapply(correlations, function(x) {
+      p <- x$correlation$p.value
+      ifelse(p < 0.001, "***", ifelse(p < 0.01, "**", ifelse(p < 0.05, "*", "ns")))
+    }),
+    stringsAsFactors = FALSE
+  )
+  
+  print(summary_table)
+  
+  return(list(
+    clean_data = clean_data,
+    correlations = correlations,
+    plots = plots,
+    summary = summary_table
+  ))
+}
+
+# 使用示例：
+# 对于look_0的分析
+ result_look_0_analysis <- analyze_correlations(result_look, "look_0", "Look Behavior (0%)")
+
+# 对于look_100的分析
+result_look_100_analysis <- analyze_correlations(result_look, "look_100", "Look Behavior (100%)")
+# 对于look_100m0的分析
+result_look_100m0_analysis <- analyze_correlations(result_look, "look_100m0", "Look Behavior (100%-0%)")
+```
+```{r}
+# 四组数据相关性分析执行代码
+
+# 首先按order和gender分组（假设已经运行了分组代码）
+group_uf_f <- subset(result_look, order == "uf" & gender == "f")
+group_uf_m <- subset(result_look, order == "uf" & gender == "m")
+group_fu_f <- subset(result_look, order == "fu" & gender == "f")
+group_fu_m <- subset(result_look, order == "fu" & gender == "m")
+
+# 对四组分别进行look_0的相关性分析
+cat("=============================================\n")
+cat("开始四组数据的look_0相关性分析\n")
+cat("=============================================\n")
+
+# 组1: UF + Female
+cat("\n【组1: UF + Female】\n")
+uf_f_look_0 <- analyze_correlations(group_uf_f, "look_0", "Look Behavior (0%) - UF Female", 
+                                   save_plots = TRUE, output_prefix = "UF_Female_look_0")
+
+# 组2: UF + Male
+cat("\n【组2: UF + Male】\n")
+uf_m_look_0 <- analyze_correlations(group_uf_m, "look_0", "Look Behavior (0%) - UF Male", 
+                                   save_plots = TRUE, output_prefix = "UF_Male_look_0")
+
+# 组3: FU + Female
+cat("\n【组3: FU + Female】\n")
+fu_f_look_0 <- analyze_correlations(group_fu_f, "look_0", "Look Behavior (0%) - FU Female", 
+                                   save_plots = TRUE, output_prefix = "FU_Female_look_0")
+
+# 组4: FU + Male
+cat("\n【组4: FU + Male】\n")
+fu_m_look_0 <- analyze_correlations(group_fu_m, "look_0", "Look Behavior (0%) - FU Male", 
+                                   save_plots = TRUE, output_prefix = "FU_Male_look_0")
+
+# 对四组分别进行look_100的相关性分析
+cat("\n=============================================\n")
+cat("开始四组数据的look_100相关性分析\n")
+cat("=============================================\n")
+
+# 组1: UF + Female
+cat("\n【组1: UF + Female】\n")
+uf_f_look_100 <- analyze_correlations(group_uf_f, "look_100", "Look Behavior (100%) - UF Female", 
+                                     save_plots = TRUE, output_prefix = "UF_Female_look_100")
+
+# 组2: UF + Male
+cat("\n【组2: UF + Male】\n")
+uf_m_look_100 <- analyze_correlations(group_uf_m, "look_100", "Look Behavior (100%) - UF Male", 
+                                     save_plots = TRUE, output_prefix = "UF_Male_look_100")
+
+# 组3: FU + Female
+cat("\n【组3: FU + Female】\n")
+fu_f_look_100 <- analyze_correlations(group_fu_f, "look_100", "Look Behavior (100%) - FU Female", 
+                                     save_plots = TRUE, output_prefix = "FU_Female_look_100")
+
+# 组4: FU + Male
+cat("\n【组4: FU + Male】\n")
+fu_m_look_100 <- analyze_correlations(group_fu_m, "look_100", "Look Behavior (100%) - FU Male", 
+                                     save_plots = TRUE, output_prefix = "FU_Male_look_100")
+
+# 对四组分别进行look_100m0的相关性分析
+cat("\n=============================================\n")
+cat("开始四组数据的look_100m0相关性分析\n")
+cat("=============================================\n")
+
+# 组1: UF + Female
+cat("\n【组1: UF + Female】\n")
+uf_f_look_100m0 <- analyze_correlations(group_uf_f, "look_100m0", "Look Behavior (100%-0%) - UF Female", 
+                                       save_plots = TRUE, output_prefix = "UF_Female_look_100m0")
+
+# 组2: UF + Male
+cat("\n【组2: UF + Male】\n")
+uf_m_look_100m0 <- analyze_correlations(group_uf_m, "look_100m0", "Look Behavior (100%-0%) - UF Male", 
+                                       save_plots = TRUE, output_prefix = "UF_Male_look_100m0")
+
+# 组3: FU + Female
+cat("\n【组3: FU + Female】\n")
+fu_f_look_100m0 <- analyze_correlations(group_fu_f, "look_100m0", "Look Behavior (100%-0%) - FU Female", 
+                                       save_plots = TRUE, output_prefix = "FU_Female_look_100m0")
+
+# 组4: FU + Male
+cat("\n【组4: FU + Male】\n")
+fu_m_look_100m0 <- analyze_correlations(group_fu_m, "look_100m0", "Look Behavior (100%-0%) - FU Male", 
+                                       save_plots = TRUE, output_prefix = "FU_Male_look_100m0")
+
+# 对四组分别进行look_5080的相关性分析
+cat("\n=============================================\n")
+cat("开始四组数据的look_5080相关性分析\n")
+cat("=============================================\n")
+
+# 组1: UF + Female
+cat("\n【组1: UF + Female】\n")
+uf_f_look_5080 <- analyze_correlations(group_uf_f, "look_5080", "Look Behavior (50-80%) - UF Female", 
+                                      save_plots = TRUE, output_prefix = "UF_Female_look_5080")
+
+# 组2: UF + Male
+cat("\n【组2: UF + Male】\n")
+uf_m_look_5080 <- analyze_correlations(group_uf_m, "look_5080", "Look Behavior (50-80%) - UF Male", 
+                                      save_plots = TRUE, output_prefix = "UF_Male_look_5080")
+
+# 组3: FU + Female
+cat("\n【组3: FU + Female】\n")
+fu_f_look_5080 <- analyze_correlations(group_fu_f, "look_5080", "Look Behavior (50-80%) - FU Female", 
+                                      save_plots = TRUE, output_prefix = "FU_Female_look_5080")
+
+# 组4: FU + Male
+cat("\n【组4: FU + Male】\n")
+fu_m_look_5080 <- analyze_correlations(group_fu_m, "look_5080", "Look Behavior (50-80%) - FU Male", 
+                                      save_plots = TRUE, output_prefix = "FU_Male_look_5080")
+
+cat("\n=============================================\n")
+cat("所有四组数据的相关性分析已完成！\n")
+cat("=============================================\n")
+```
+```{r}
+Th <- result_Th %>%
+  select(No, order, gender,condition,RT_mean)
+anovakun(Th, "ABsC", long = TRUE,between = c("order", "gender"), within = "condition", dv = "RT_mean",eta=TRUE)
+```
+
+```{r}
+# 加载必要的包
+library(lme4)
+library(lmerTest)  
+library(emmeans)   
+library(sjPlot)    
+library(performance) 
+
+# 准备数据
+Th <- result_Th %>%
+  select(No, order, gender, condition, RT_mean)
+
+# 确保因子变量正确编码
+Th$No <- as.factor(Th$No)
+Th$order <- as.factor(Th$order)
+Th$gender <- as.factor(Th$gender)
+Th$condition <- as.factor(Th$condition)
+
+# 建立线性混合模型
+# No作为随机效应(被试内变量)
+# order和gender作为被试间固定效应
+# condition作为被试内固定效应
+model0 <- lmer(RT_mean ~ order * gender * condition + (1|No), 
+              data = Th,
+              REML = TRUE)
+
+model1 <- lmer(RT_mean ~ order + gender + condition + order:condition + (1|No), 
+                    data = Th, REML = TRUE)
+
+model2 <- lmer(RT_mean ~ order + condition + order:condition + (1|No), 
+                    data = Th, REML = TRUE)
+anova(model0,model1,model2)
+summary(model2)
+```

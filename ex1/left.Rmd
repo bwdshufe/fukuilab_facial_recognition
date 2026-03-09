@@ -1,0 +1,3886 @@
+---
+title: "hib"
+author: "bian"
+date: "2025-11-10"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{r cars}
+summary(cars)
+```
+
+## Including Plots
+
+You can also embed plots, for example:
+
+```{r pressure, echo=FALSE}
+plot(pressure)
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+
+```{r}
+library(readxl)
+library(lme4)
+library(lmerTest)
+library(tidyverse)
+library(ggeffects)
+library(ggplot2)
+library(dplyr)
+source("anovakun_489.txt")
+library(extrafont)
+library(ggh4x)
+```
+
+```{r}
+percent_data <- read.csv("statistics_by_ID_condition_percent_pi20pi20.csv")
+
+assign("start_id", 1, envir = .GlobalEnv)
+assign("end_id", 100, envir = .GlobalEnv)
+missing_ids <- c()
+missing_ids <- sort(c(missing_ids, 42))#width100
+missing_ids <- sort(c(missing_ids, 20,59,73,83,57,19,55,70,79,92,38))#PI20
+missing_ids <- sort(c(missing_ids, 59,83,57,55,79,73)) #accuracy
+missing_ids <- sort(c(missing_ids, 20,57,19,70,92,38))#PI20
+missing_ids <- sort(c(missing_ids, 14))#miss of syou
+missing_ids <- sort(c(missing_ids, 47,50,55))#RT too long
+missing_ids <- sort(c(missing_ids, 96,31))#width偏差
+missing_ids <- sort(c(missing_ids, 98,13,66))#視線ない
+missing_ids1 <- missing_ids
+
+# 删除这些ID对应的行
+percent_data<- percent_data[!percent_data$ID %in% missing_ids1, ]
+
+id_count <- length(unique(percent_data$ID))
+print(paste("非重复的ID个数：", id_count))
+
+print(unique(percent_data$ID))
+```
+
+
+###総反応時間
+```{r}
+all_RT <- percent_data %>% 
+  mutate(mean_RT = mean_RT / 1000000) %>%
+  # 创建分组变量
+  mutate(percent_group = case_when(
+    percent >= 0 & percent <= 30 ~ "low",
+    percent >= 35 & percent <= 65 ~ "middle",
+    percent >= 70 & percent <= 100 ~ "high"
+  )) %>%
+  
+  # 按ID、order、gender、condition和分组计算均值
+  group_by(ID, order, gender, condition, percent_group) %>%
+  summarise(
+    mean_RT = mean(mean_RT, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+anovakun(all_RT, "ABsCD", 
+         long = TRUE, 
+         between = c("order", "gender"),
+         within = c("condition", "percent_group"), 
+         dv = "mean_RT",
+         auto = T,
+         cin = T,
+         peta = T)
+```
+```{r}
+# 首先安装包（如果还没安装）
+# install.packages("ggh4x")
+
+library(ggplot2)
+library(dplyr)
+library(extrafont)
+library(ggh4x)
+
+# 数据准备代码相同...
+plot_data <- data.frame(
+  order = c(
+    rep("uf", 9), rep("uf", 9),
+    rep("fu", 9), rep("fu", 9)
+  ),
+  gender = c(
+    rep("m", 9), rep("f", 9),
+    rep("m", 9), rep("f", 9)
+  ),
+  condition = rep(c("f", "f", "f", "u1", "u1", "u1", "u2", "u2", "u2"), 4),
+  percent_group = rep(c("high", "low", "middle"), 12),
+  mean_value = c(
+    0.7162, 0.6321, 0.7787, 0.7586, 0.6522, 0.8617, 0.6722, 0.5744, 0.6965,
+    0.8163, 0.6295, 0.7784, 0.7869, 0.6325, 0.8061, 0.7788, 0.5604, 0.6748,
+    0.7958, 0.6606, 0.8770, 0.7077, 0.5659, 0.6976, 0.6530, 0.5273, 0.6297,
+    0.8073, 0.7172, 0.9787, 0.7832, 0.5905, 0.7506, 0.7946, 0.5651, 0.7054
+  ),
+  cin_l = c(
+    0.6748, 0.6001, 0.7384, 0.6919, 0.5959, 0.7783, 0.6061, 0.5371, 0.6418,
+    0.7480, 0.5921, 0.7093, 0.7277, 0.6025, 0.7528, 0.7247, 0.5116, 0.6285,
+    0.6751, 0.6176, 0.7764, 0.6523, 0.5134, 0.6549, 0.6055, 0.4631, 0.5613,
+    0.7463, 0.6609, 0.8725, 0.7192, 0.5481, 0.7076, 0.7257, 0.5185, 0.6733
+  ),
+  cin_u = c(
+    0.7577, 0.6641, 0.8189, 0.8253, 0.7085, 0.9451, 0.7383, 0.6117, 0.7513,
+    0.8846, 0.6669, 0.8475, 0.8461, 0.6625, 0.8594, 0.8329, 0.6093, 0.7211,
+    0.9164, 0.7036, 0.9776, 0.7632, 0.6184, 0.7402, 0.7004, 0.5916, 0.6982,
+    0.8682, 0.7736, 1.0850, 0.8472, 0.6330, 0.7935, 0.8635, 0.6116, 0.7375
+  )
+)
+
+plot_data$percent_group <- factor(plot_data$percent_group, 
+                                  levels = c("low", "middle", "high"),
+                                  labels = c("Low", "Middle", "High"))
+
+p <- ggplot(plot_data, aes(x = percent_group, y = mean_value, 
+                            color = condition, 
+                            group = condition)) +
+  geom_line(size = 1) +
+  geom_point(size = 2.5) +
+  geom_errorbar(aes(ymin = cin_l, ymax = cin_u), 
+                width = 0.3, size = 0.8) +
+  facet_grid2(order ~ gender, 
+              labeller = labeller(gender = c(f = "Female", m = "Male"),
+                                 order = c(fu = "FU", uf = "UF")),
+              axes = "all",           # 所有面板都显示轴
+              remove_labels = "x") +  # 移除上方的x轴标签
+  scale_color_manual(
+    values = c("f" = "#9370DB", "u1" = "#FFA500", "u2" = "#4169E1")
+  ) +
+  labs(x = "", 
+       y = "Reaction Time (s)") +
+  scale_y_continuous(limits = c(0.4, 1.2), breaks = seq(0.4, 1.2, 0.2)) +
+  theme_classic(base_family = "Times New Roman") +
+  theme(
+    strip.background = element_blank(),
+    strip.text = element_text(size = 12, face = "bold", family = "Times New Roman"),
+    axis.text = element_text(size = 10, family = "Times New Roman"),
+    axis.title = element_text(size = 11, family = "Times New Roman"),
+    legend.position = "none",
+    panel.spacing = unit(1, "lines")
+  )
+
+print(p)
+```
+###order組2次
+```{r}
+# 分割FU组数据
+fu_RT_data <- all_RT %>%
+  filter(order == "fu")%>%
+  select(-order)%>%
+  select(-gender)
+
+# 分析FU组的条件×百分比组交互
+anovakun(fu_RT_data, "sAB", 
+         long = TRUE,
+         within = c("condition", "percent_group"), 
+         dv = "mean_RT",auto = T,cin = T,peta = T)
+# 分割uf组数据
+uf_RT_data <- all_RT %>%
+  filter(order == "uf")%>%
+  select(-order)%>%
+  select(-gender)
+
+# 分析uf组的条件×百分比组交互
+anovakun(uf_RT_data, "sAB", 
+         long = TRUE,
+         within = c("condition", "percent_group"), 
+         dv = "mean_RT",auto = T,cin = T,peta = T)
+```
+
+###condion組2次
+```{r}
+# 分割f组数据
+f_RT_data <- all_RT %>%
+  filter(condition == "f")%>%
+  select(-condition)%>%
+  select(-gender)
+
+# 分析F组的条件×百分比组交互
+anovakun(f_RT_data, "AsB", 
+         long = TRUE,
+         between = "order",
+         within = "percent_group", 
+         dv = "mean_RT",auto = T,cin = T,peta = T)
+
+# 分割u1组数据
+u1_RT_data <- all_RT %>%
+  filter(condition == "u1")%>%
+  select(-condition)%>%
+  select(-gender)
+
+# 分析u1组的条件×百分比组交互
+anovakun(u1_RT_data, "AsB", 
+         long = TRUE,
+         between = "order",
+         within = "percent_group", 
+         dv = "mean_RT",auto = T,cin = T,peta = T)
+
+# 分割u2组数据
+u2_RT_data <- all_RT %>%
+  filter(condition == "u2")%>%
+  select(-condition)%>%
+  select(-gender)
+
+# 分析u2组的条件×百分比组交互
+anovakun(u2_RT_data, "AsB", 
+         long = TRUE,
+         between = "order",
+         within = "percent_group", 
+         dv = "mean_RT",auto = T,cin = T,peta = T)
+```
+
+
+```{r}
+# 元のデータ処理
+all_RT <- percent_data %>% 
+  mutate(mean_RT = mean_RT / 1000000) %>%
+  mutate(percent_group = case_when(
+    percent >= 0 & percent <= 30 ~ "low",
+    percent >= 35 & percent <= 65 ~ "middle",
+    percent >= 70 & percent <= 100 ~ "high"
+  )) %>%
+  group_by(ID, order, gender, condition, percent_group) %>%
+  summarise(
+    mean_RT = mean(mean_RT, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+# conditionをwide形式に変換
+all_RT_wide <- all_RT %>%
+  pivot_wider(
+    names_from = condition,
+    values_from = mean_RT
+  )
+
+# データ1: f - u2
+diff_f_u2 <- all_RT_wide %>%
+  mutate(RT_diff = f - u2) %>%
+  select(ID, order, gender, percent_group, RT_diff)
+
+# データ2: u1 - u2
+diff_u1_u2 <- all_RT_wide %>%
+  mutate(RT_diff = u1 - u2) %>%
+  select(ID, order, gender, percent_group, RT_diff)
+
+# 分散分析1: f - u2
+cat("\n=== f条件 - u2条件の分散分析 ===\n")
+anovakun(diff_f_u2, "ABsC", 
+         long = TRUE, 
+         between = c("order", "gender"),
+         within = "percent_group", 
+         dv = "RT_diff",
+         auto = TRUE,
+         cin = TRUE,
+         peta = TRUE)
+
+# 分散分析2: u1 - u2
+cat("\n=== u1条件 - u2条件の分散分析 ===\n")
+anovakun(diff_u1_u2, "ABsC", 
+         long = TRUE, 
+         between = c("order", "gender"),
+         within = "percent_group", 
+         dv = "RT_diff",
+         auto = TRUE,
+         cin = TRUE,
+         peta = TRUE)
+```
+
+
+###総注視時間
+
+
+```{r}
+all_gaze <- percent_data %>% 
+  mutate(mean_total_gaze_time_ms_s = mean_total_gaze_time_ms / 1000000) %>%
+  # 创建分组变量
+  mutate(percent_group = case_when(
+    percent >= 0 & percent <= 30 ~ "low",
+    percent >= 35 & percent <= 65 ~ "middle",
+    percent >= 70 & percent <= 100 ~ "high"
+  )) %>%
+  # 按ID、order、gender、condition和分组计算均值
+  group_by(ID, order, gender, condition, percent_group) %>%
+  summarise(
+    mean_gaze_time_s = mean(mean_total_gaze_time_ms_s, na.rm = TRUE),
+    .groups = "drop"
+  )
+anovakun(all_gaze, "ABsCD", 
+         long = TRUE, 
+         between = c("order", "gender"),
+         within = c("condition", "percent_group"), 
+         dv = "mean_total_gaze_time_ms_s",
+         auto = T,cin = T,peta = T)
+```
+
+```{r}
+library(ggplot2)
+library(dplyr)
+library(extrafont)
+library(ggh4x)
+
+# データ準備コードは同じ...
+plot_data <- data.frame(
+  order = c(
+    rep("uf", 9), rep("uf", 9),
+    rep("fu", 9), rep("fu", 9)
+  ),
+  gender = c(
+    rep("m", 9), rep("f", 9),
+    rep("m", 9), rep("f", 9)
+  ),
+  condition = rep(c("f", "f", "f", "u1", "u1", "u1", "u2", "u2", "u2"), 4),
+  percent_group = rep(c("high", "low", "middle"), 12),
+  mean_value = c(
+    0.6765, 0.5947, 0.7339, 0.7209, 0.6164, 0.8119, 0.6369, 0.5424, 0.6610,
+    0.7704, 0.5938, 0.7346, 0.7305, 0.5872, 0.7468, 0.7453, 0.5360, 0.6454,
+    0.7296, 0.6107, 0.8048, 0.6496, 0.5239, 0.6449, 0.5970, 0.4835, 0.5787,
+    0.7702, 0.6818, 0.9273, 0.7434, 0.5610, 0.7121, 0.7415, 0.5311, 0.6585
+  ),
+  cin_l = c(
+    0.6392, 0.5659, 0.6989, 0.6610, 0.5694, 0.7381, 0.5719, 0.5121, 0.6087,
+    0.7086, 0.5574, 0.6656, 0.6721, 0.5589, 0.6972, 0.6932, 0.4899, 0.6035,
+    0.6281, 0.5700, 0.7129, 0.5997, 0.4760, 0.6039, 0.5543, 0.4271, 0.5179,
+    0.7086, 0.6275, 0.8251, 0.6741, 0.5180, 0.6677, 0.6908, 0.4852, 0.6200
+  ),
+  cin_u = c(
+    0.7138, 0.6235, 0.7688, 0.7808, 0.6635, 0.8857, 0.7019, 0.5727, 0.7132,
+    0.8322, 0.6302, 0.8036, 0.7888, 0.6156, 0.7965, 0.7974, 0.5822, 0.6874,
+    0.8311, 0.6513, 0.8967, 0.6995, 0.5718, 0.6858, 0.6397, 0.5400, 0.6395,
+    0.8317, 0.7361, 1.0295, 0.8126, 0.6040, 0.7564, 0.7922, 0.5769, 0.6969
+  )
+)
+
+plot_data$percent_group <- factor(plot_data$percent_group,
+                                   levels = c("low", "middle", "high"),
+                                   labels = c("Low", "Middle", "High"))
+
+# conditionの図例ラベルを設定
+plot_data$condition <- factor(plot_data$condition,
+                               levels = c("f", "u1", "u2"),
+                               labels = c("Friend", "Unknown1", "Unknown2"))
+
+p <- ggplot(plot_data, aes(x = percent_group, y = mean_value, 
+                           color = condition, group = condition)) +
+  geom_line(size = 1) +
+  # geom_point()を削除
+  geom_errorbar(aes(ymin = cin_l, ymax = cin_u), 
+                width = 0.1, size = 0.8) +
+  facet_grid2(order ~ gender,
+              labeller = labeller(gender = c(f = "Female", m = "Male"),
+                                 order = c(fu = "FU", uf = "UF")),
+              axes = "all",
+              remove_labels = "all") +
+  scale_color_manual(
+    values = c("Friend" = "#9370DB", 
+               "Unknown1" = "#FFA500", 
+               "Unknown2" = "#4169E1"),
+    name = "Condition"  # 図例のタイトル
+  ) +
+  labs(x = "", y = "AOIGaze Time (s)") +
+  scale_y_continuous(limits = c(0.4, 1.2), 
+                     breaks = seq(0.4, 1.2, 0.2)) +
+  theme_classic(base_family = "Arial") +
+  theme(
+    strip.background = element_blank(),
+    strip.text = element_text(size = 20, face = "bold", family = "Arial"),
+    axis.text = element_text(size = 15, family = "Arial"),
+    axis.title = element_text(size = 20, family = "Arial"),
+    legend.position = "bottom",  # "none"から"right"に変更
+    legend.title = element_text(size = 20, family = "Arial"),
+    legend.text = element_text(size = 15, family = "Arial"),
+    panel.spacing = unit(1, "lines")
+  )
+
+print(p)
+
+ggsave(
+  filename = "narrow_high_res_plot.png",  # 保存的文件名
+  plot = p,
+  width = 6,        # 【窄图关键】宽度设小一点 (例如 5-6 英寸)
+  height = 8,       # 高度设大一点，形成纵向长图
+  units = "in",     # 单位：英寸
+  dpi = 300         # 【高分辨率关键】300是印刷标准，需要更高可用 600
+)
+```
+```{r}
+library(ggplot2)
+library(dplyr)
+library(extrafont)
+library(ggh4x)
+
+# データ準備（前と同じ）
+plot_data <- data.frame(
+  order = c(
+    rep("uf", 9), rep("uf", 9),
+    rep("fu", 9), rep("fu", 9)
+  ),
+  gender = c(
+    rep("m", 9), rep("f", 9),
+    rep("m", 9), rep("f", 9)
+  ),
+  condition = rep(c("f", "f", "f", "u1", "u1", "u1", "u2", "u2", "u2"), 4),
+  percent_group = rep(c("high", "low", "middle"), 12),
+  mean_value = c(
+    0.6765, 0.5947, 0.7339, 0.7209, 0.6164, 0.8119, 0.6369, 0.5424, 0.6610,
+    0.7704, 0.5938, 0.7346, 0.7305, 0.5872, 0.7468, 0.7453, 0.5360, 0.6454,
+    0.7296, 0.6107, 0.8048, 0.6496, 0.5239, 0.6449, 0.5970, 0.4835, 0.5787,
+    0.7702, 0.6818, 0.9273, 0.7434, 0.5610, 0.7121, 0.7415, 0.5311, 0.6585
+  ),
+  cin_l = c(
+    0.6392, 0.5659, 0.6989, 0.6610, 0.5694, 0.7381, 0.5719, 0.5121, 0.6087,
+    0.7086, 0.5574, 0.6656, 0.6721, 0.5589, 0.6972, 0.6932, 0.4899, 0.6035,
+    0.6281, 0.5700, 0.7129, 0.5997, 0.4760, 0.6039, 0.5543, 0.4271, 0.5179,
+    0.7086, 0.6275, 0.8251, 0.6741, 0.5180, 0.6677, 0.6908, 0.4852, 0.6200
+  ),
+  cin_u = c(
+    0.7138, 0.6235, 0.7688, 0.7808, 0.6635, 0.8857, 0.7019, 0.5727, 0.7132,
+    0.8322, 0.6302, 0.8036, 0.7888, 0.6156, 0.7965, 0.7974, 0.5822, 0.6874,
+    0.8311, 0.6513, 0.8967, 0.6995, 0.5718, 0.6858, 0.6397, 0.5400, 0.6395,
+    0.8317, 0.7361, 1.0295, 0.8126, 0.6040, 0.7564, 0.7922, 0.5769, 0.6969
+  )
+)
+
+plot_data$percent_group <- factor(plot_data$percent_group,
+                                   levels = c("low", "middle", "high"),
+                                   labels = c("Low", "Middle", "High"))
+
+plot_data$condition <- factor(plot_data$condition,
+                               levels = c("f", "u1", "u2"),
+                               labels = c("Friend", "Unknown1", "Unknown2"))
+
+# 各パネルでのY軸の最大値を取得して、ブラケットの位置を決定
+max_vals <- plot_data %>%
+  group_by(order, gender, percent_group) %>%
+  summarise(max_y = max(cin_u), .groups = "drop")
+
+# 有意差標記用データを作成
+create_bracket <- function(order_val, gender_val, group_val, 
+                          cond1, cond2, y_base, height_offset) {
+  cond_map <- c("Friend" = 1, "Unknown1" = 2, "Unknown2" = 3)
+  x_pos <- which(levels(plot_data$percent_group) == group_val)
+  
+  data.frame(
+    order = order_val,
+    gender = gender_val,
+    percent_group = group_val,
+    x = x_pos + (cond_map[cond1] - 2) * 0.15,
+    xend = x_pos + (cond_map[cond2] - 2) * 0.15,
+    y = y_base + height_offset
+  )
+}
+
+# グループ間比較用のブラケット作成関数
+create_group_bracket <- function(order_val, gender_val, cond_val,
+                                 group1, group2, y_base, height_offset) {
+  cond_map <- c("Friend" = 1, "Unknown1" = 2, "Unknown2" = 3)
+  group_x_map <- c("Low" = 1, "Middle" = 2, "High" = 3)
+  cond_offset <- (cond_map[cond_val] - 2) * 0.15
+  
+  data.frame(
+    order = order_val,
+    gender = gender_val,
+    percent_group = group1,
+    x = group_x_map[group1] + cond_offset,
+    xend = group_x_map[group2] + cond_offset,
+    y = y_base + height_offset
+  )
+}
+
+# FU（友人先順）の有意差
+# Female FU - Low組: Friend > Unknown1 > Unknown2（層を分ける）
+fu_f_low_max <- max_vals %>% filter(order == "fu", gender == "f", percent_group == "Low") %>% pull(max_y)
+fu_f_low_1 <- create_bracket("fu", "f", "Low", "Friend", "Unknown1", fu_f_low_max, 0.05)
+fu_f_low_1$label <- "***"
+fu_f_low_2 <- create_bracket("fu", "f", "Low", "Unknown1", "Unknown2", fu_f_low_max, 0.05)
+fu_f_low_2$label <- "***"
+fu_f_low_3 <- create_bracket("fu", "f", "Low", "Friend", "Unknown2", fu_f_low_max, 0.17)
+fu_f_low_3$label <- "***"
+
+# Female FU - Middle組: Friend > Unknown1 > Unknown2（層を分ける）
+fu_f_mid_max <- max_vals %>% filter(order == "fu", gender == "f", percent_group == "Middle") %>% pull(max_y)
+fu_f_mid_1 <- create_bracket("fu", "f", "Middle", "Friend", "Unknown1", fu_f_mid_max, 0.05)
+fu_f_mid_1$label <- "***"
+fu_f_mid_2 <- create_bracket("fu", "f", "Middle", "Unknown1", "Unknown2", fu_f_mid_max, 0.05)
+fu_f_mid_2$label <- "***"
+fu_f_mid_3 <- create_bracket("fu", "f", "Middle", "Friend", "Unknown2", fu_f_mid_max, 0.17)
+fu_f_mid_3$label <- "***"
+
+# Male FU - Low組: Friend > Unknown1 > Unknown2（層を分ける）
+fu_m_low_max <- max_vals %>% filter(order == "fu", gender == "m", percent_group == "Low") %>% pull(max_y)
+fu_m_low_1 <- create_bracket("fu", "m", "Low", "Friend", "Unknown1", fu_m_low_max, 0.05)
+fu_m_low_1$label <- "***"
+fu_m_low_2 <- create_bracket("fu", "m", "Low", "Unknown1", "Unknown2", fu_m_low_max, 0.05)
+fu_m_low_2$label <- "***"
+fu_m_low_3 <- create_bracket("fu", "m", "Low", "Friend", "Unknown2", fu_m_low_max, 0.17)
+fu_m_low_3$label <- "***"
+
+# Male FU - Middle組: Friend > Unknown1 > Unknown2（層を分ける）
+fu_m_mid_max <- max_vals %>% filter(order == "fu", gender == "m", percent_group == "Middle") %>% pull(max_y)
+fu_m_mid_1 <- create_bracket("fu", "m", "Middle", "Friend", "Unknown1", fu_m_mid_max, 0.05)
+fu_m_mid_1$label <- "***"
+fu_m_mid_2 <- create_bracket("fu", "m", "Middle", "Unknown1", "Unknown2", fu_m_mid_max, 0.05)
+fu_m_mid_2$label <- "***"
+fu_m_mid_3 <- create_bracket("fu", "m", "Middle", "Friend", "Unknown2", fu_m_mid_max, 0.17)
+fu_m_mid_3$label <- "***"
+
+# UF（未知同性先順）の有意差
+# Female UF - Low組: Friend ≈ Unknown1, both > Unknown2（層を分ける）
+uf_f_low_max <- max_vals %>% filter(order == "uf", gender == "f", percent_group == "Low") %>% pull(max_y)
+uf_f_low_1 <- create_bracket("uf", "f", "Low", "Friend", "Unknown2", uf_f_low_max, 0.05)
+uf_f_low_1$label <- "***"
+uf_f_low_2 <- create_bracket("uf", "f", "Low", "Unknown1", "Unknown2", uf_f_low_max, 0.13)
+uf_f_low_2$label <- "***"
+
+# Female UF - Middle組: Friend ≈ Unknown1, both > Unknown2（層を分ける）
+uf_f_mid_max <- max_vals %>% filter(order == "uf", gender == "f", percent_group == "Middle") %>% pull(max_y)
+uf_f_mid_1 <- create_bracket("uf", "f", "Middle", "Friend", "Unknown2", uf_f_mid_max, 0.05)
+uf_f_mid_1$label <- "***"
+uf_f_mid_2 <- create_bracket("uf", "f", "Middle", "Unknown1", "Unknown2", uf_f_mid_max, 0.13)
+uf_f_mid_2$label <- "***"
+
+# Male UF - Low組: Friend ≈ Unknown1, both > Unknown2（層を分ける）
+uf_m_low_max <- max_vals %>% filter(order == "uf", gender == "m", percent_group == "Low") %>% pull(max_y)
+uf_m_low_1 <- create_bracket("uf", "m", "Low", "Friend", "Unknown2", uf_m_low_max, 0.05)
+uf_m_low_1$label <- "***"
+uf_m_low_2 <- create_bracket("uf", "m", "Low", "Unknown1", "Unknown2", uf_m_low_max, 0.13)
+uf_m_low_2$label <- "***"
+
+# Male UF - Middle組: Friend ≈ Unknown1, both > Unknown2（層を分ける）
+uf_m_mid_max <- max_vals %>% filter(order == "uf", gender == "m", percent_group == "Middle") %>% pull(max_y)
+uf_m_mid_1 <- create_bracket("uf", "m", "Middle", "Friend", "Unknown2", uf_m_mid_max, 0.05)
+uf_m_mid_1$label <- "***"
+uf_m_mid_2 <- create_bracket("uf", "m", "Middle", "Unknown1", "Unknown2", uf_m_mid_max, 0.13)
+uf_m_mid_2$label <- "***"
+
+# 【追加】FU順序（Female & Male両方）におけるFriend条件でのMiddle > High
+# Female FU
+fu_f_mid_friend_max <- plot_data %>% 
+  filter(order == "fu", gender == "f", percent_group == "Middle", condition == "Friend") %>% 
+  pull(cin_u)
+fu_f_high_friend_max <- plot_data %>% 
+  filter(order == "fu", gender == "f", percent_group == "High", condition == "Friend") %>% 
+  pull(cin_u)
+base_y_f <- max(fu_f_mid_friend_max, fu_f_high_friend_max)
+
+fu_f_mid_vs_high <- create_group_bracket("fu", "f", "Friend", 
+                                          "Middle", "High", 
+                                          base_y_f, 0.28)  # 他のブラケットと重ならないように高い位置に
+fu_f_mid_vs_high$label <- "***"
+
+# Male FU
+fu_m_mid_friend_max <- plot_data %>% 
+  filter(order == "fu", gender == "m", percent_group == "Middle", condition == "Friend") %>% 
+  pull(cin_u)
+fu_m_high_friend_max <- plot_data %>% 
+  filter(order == "fu", gender == "m", percent_group == "High", condition == "Friend") %>% 
+  pull(cin_u)
+base_y_m <- max(fu_m_mid_friend_max, fu_m_high_friend_max)
+
+fu_m_mid_vs_high <- create_group_bracket("fu", "m", "Friend", 
+                                          "Middle", "High", 
+                                          base_y_m, 0.28)  # 他のブラケットと重ならないように高い位置に
+fu_m_mid_vs_high$label <- "***"
+
+# すべてのブラケットを結合
+sig_data <- rbind(
+  fu_f_low_1, fu_f_low_2, fu_f_low_3,
+  fu_f_mid_1, fu_f_mid_2, fu_f_mid_3,
+  fu_m_low_1, fu_m_low_2, fu_m_low_3,
+  fu_m_mid_1, fu_m_mid_2, fu_m_mid_3,
+  uf_f_low_1, uf_f_low_2,
+  uf_f_mid_1, uf_f_mid_2,
+  uf_m_low_1, uf_m_low_2,
+  uf_m_mid_1, uf_m_mid_2,
+  fu_f_mid_vs_high,  # Female追加
+  fu_m_mid_vs_high   # Male追加
+)
+
+# プロット作成
+p <- ggplot(plot_data, aes(x = percent_group, y = mean_value, 
+                           color = condition, group = condition)) +
+  geom_line(size = 1, position = position_dodge(width = 0.3)) +
+  geom_errorbar(aes(ymin = cin_l, ymax = cin_u), 
+                width = 0.1, size = 0.8,
+                position = position_dodge(width = 0.3)) +
+  geom_point(size = 2, position = position_dodge(width = 0.3)) +
+  # ブラケット
+  geom_segment(data = sig_data,
+               aes(x = x, xend = xend, y = y, yend = y),
+               inherit.aes = FALSE,
+               color = "black",
+               size = 0.4) +
+  geom_segment(data = sig_data,
+               aes(x = x, xend = x, y = y - 0.015, yend = y),
+               inherit.aes = FALSE,
+               color = "black",
+               size = 0.4) +
+  geom_segment(data = sig_data,
+               aes(x = xend, xend = xend, y = y - 0.015, yend = y),
+               inherit.aes = FALSE,
+               color = "black",
+               size = 0.4) +
+  # アスタリスク
+  geom_text(data = sig_data,
+            aes(x = (x + xend) / 2, y = y + 0.02, label = label),
+            inherit.aes = FALSE,
+            size = 4,
+            family = "Arial") +
+  facet_grid2(order ~ gender,
+              labeller = labeller(gender = c(f = "Female", m = "Male"),
+                                 order = c(fu = "FU", uf = "UF")),
+              axes = "all",
+              remove_labels = "all") +
+  scale_color_manual(
+    values = c("Friend" = "#9370DB", 
+               "Unknown1" = "#FFA500", 
+               "Unknown2" = "#4169E1"),
+    name = "Condition"
+  ) +
+  labs(x = "", y = "AOI Gaze Time (s)") +
+  scale_y_continuous(limits = c(0.4, 1.4),  # 上限を少し拡大
+                     breaks = seq(0.4, 1.4, 0.2)) +
+  theme_classic(base_family = "Arial") +
+  theme(
+    strip.background = element_blank(),
+    strip.text = element_text(size = 20, face = "bold", family = "Arial"),
+    axis.text = element_text(size = 15, family = "Arial"),
+    axis.title = element_text(size = 20, family = "Arial"),
+    legend.position = "bottom",
+    legend.title = element_text(size = 20, family = "Arial"),
+    legend.text = element_text(size = 15, family = "Arial"),
+    panel.spacing = unit(1, "lines")
+  )
+
+print(p)
+
+ggsave(
+  filename = "narrow_high_res_plot_3way_interaction.tiff",
+  plot = p,
+  width = 6,
+  height = 8,
+  units = "in",
+  dpi = 600
+)
+```
+
+```{r}
+library(ggplot2)
+library(dplyr)
+library(extrafont)
+library(ggh4x)
+
+# データ準備（前と同じ）
+plot_data <- data.frame(
+  order = c(
+    rep("uf", 9), rep("uf", 9),
+    rep("fu", 9), rep("fu", 9)
+  ),
+  gender = c(
+    rep("m", 9), rep("f", 9),
+    rep("m", 9), rep("f", 9)
+  ),
+  condition = rep(c("f", "f", "f", "u1", "u1", "u1", "u2", "u2", "u2"), 4),
+  percent_group = rep(c("high", "low", "middle"), 12),
+  mean_value = c(
+    0.6765, 0.5947, 0.7339, 0.7209, 0.6164, 0.8119, 0.6369, 0.5424, 0.6610,
+    0.7704, 0.5938, 0.7346, 0.7305, 0.5872, 0.7468, 0.7453, 0.5360, 0.6454,
+    0.7296, 0.6107, 0.8048, 0.6496, 0.5239, 0.6449, 0.5970, 0.4835, 0.5787,
+    0.7702, 0.6818, 0.9273, 0.7434, 0.5610, 0.7121, 0.7415, 0.5311, 0.6585
+  ),
+  cin_l = c(
+    0.6392, 0.5659, 0.6989, 0.6610, 0.5694, 0.7381, 0.5719, 0.5121, 0.6087,
+    0.7086, 0.5574, 0.6656, 0.6721, 0.5589, 0.6972, 0.6932, 0.4899, 0.6035,
+    0.6281, 0.5700, 0.7129, 0.5997, 0.4760, 0.6039, 0.5543, 0.4271, 0.5179,
+    0.7086, 0.6275, 0.8251, 0.6741, 0.5180, 0.6677, 0.6908, 0.4852, 0.6200
+  ),
+  cin_u = c(
+    0.7138, 0.6235, 0.7688, 0.7808, 0.6635, 0.8857, 0.7019, 0.5727, 0.7132,
+    0.8322, 0.6302, 0.8036, 0.7888, 0.6156, 0.7965, 0.7974, 0.5822, 0.6874,
+    0.8311, 0.6513, 0.8967, 0.6995, 0.5718, 0.6858, 0.6397, 0.5400, 0.6395,
+    0.8317, 0.7361, 1.0295, 0.8126, 0.6040, 0.7564, 0.7922, 0.5769, 0.6969
+  )
+)
+
+plot_data$percent_group <- factor(plot_data$percent_group,
+                                   levels = c("low", "middle", "high"),
+                                   labels = c("Low", "Middle", "High"))
+
+plot_data$condition <- factor(plot_data$condition,
+                               levels = c("f", "u1", "u2"),
+                               labels = c("Friend", "Unknown1", "Unknown2"))
+
+# 各パネルでのY軸の最大値を取得して、ブラケットの位置を決定
+max_vals <- plot_data %>%
+  group_by(order, gender, percent_group) %>%
+  summarise(max_y = max(cin_u), .groups = "drop")
+
+# 有意差標記用データを作成
+# 各モーフィンググループ内で条件間を比較
+
+create_bracket <- function(order_val, gender_val, group_val, 
+                          cond1, cond2, y_base, height_offset) {
+  # 条件を数値に変換（Friend=1, Unknown1=2, Unknown2=3）
+  cond_map <- c("Friend" = 1, "Unknown1" = 2, "Unknown2" = 3)
+  x_pos <- which(levels(plot_data$percent_group) == group_val)
+  
+  data.frame(
+    order = order_val,
+    gender = gender_val,
+    percent_group = group_val,
+    x = x_pos + (cond_map[cond1] - 2) * 0.15,  # 3つの条件を横に並べる
+    xend = x_pos + (cond_map[cond2] - 2) * 0.15,
+    y = y_base + height_offset
+  )
+}
+
+# FU（友人先順）の有意差
+# Female FU - Low組: Friend > Unknown1 > Unknown2
+fu_f_low_max <- max_vals %>% filter(order == "fu", gender == "f", percent_group == "Low") %>% pull(max_y)
+fu_f_low_1 <- create_bracket("fu", "f", "Low", "Friend", "Unknown1", fu_f_low_max, 0.05)
+fu_f_low_1$label <- "***"
+fu_f_low_2 <- create_bracket("fu", "f", "Low", "Unknown1", "Unknown2", fu_f_low_max, 0.12)
+fu_f_low_2$label <- "***"
+fu_f_low_3 <- create_bracket("fu", "f", "Low", "Friend", "Unknown2", fu_f_low_max, 0.19)
+fu_f_low_3$label <- "***"
+
+# Female FU - Middle組: Friend > Unknown1 > Unknown2
+fu_f_mid_max <- max_vals %>% filter(order == "fu", gender == "f", percent_group == "Middle") %>% pull(max_y)
+fu_f_mid_1 <- create_bracket("fu", "f", "Middle", "Friend", "Unknown1", fu_f_mid_max, 0.05)
+fu_f_mid_1$label <- "***"
+fu_f_mid_2 <- create_bracket("fu", "f", "Middle", "Unknown1", "Unknown2", fu_f_mid_max, 0.12)
+fu_f_mid_2$label <- "***"
+fu_f_mid_3 <- create_bracket("fu", "f", "Middle", "Friend", "Unknown2", fu_f_mid_max, 0.19)
+fu_f_mid_3$label <- "***"
+
+# Male FU - Low組: Friend > Unknown1 > Unknown2
+fu_m_low_max <- max_vals %>% filter(order == "fu", gender == "m", percent_group == "Low") %>% pull(max_y)
+fu_m_low_1 <- create_bracket("fu", "m", "Low", "Friend", "Unknown1", fu_m_low_max, 0.05)
+fu_m_low_1$label <- "***"
+fu_m_low_2 <- create_bracket("fu", "m", "Low", "Unknown1", "Unknown2", fu_m_low_max, 0.12)
+fu_m_low_2$label <- "***"
+fu_m_low_3 <- create_bracket("fu", "m", "Low", "Friend", "Unknown2", fu_m_low_max, 0.19)
+fu_m_low_3$label <- "***"
+
+# Male FU - Middle組: Friend > Unknown1 > Unknown2
+fu_m_mid_max <- max_vals %>% filter(order == "fu", gender == "m", percent_group == "Middle") %>% pull(max_y)
+fu_m_mid_1 <- create_bracket("fu", "m", "Middle", "Friend", "Unknown1", fu_m_mid_max, 0.05)
+fu_m_mid_1$label <- "***"
+fu_m_mid_2 <- create_bracket("fu", "m", "Middle", "Unknown1", "Unknown2", fu_m_mid_max, 0.12)
+fu_m_mid_2$label <- "***"
+fu_m_mid_3 <- create_bracket("fu", "m", "Middle", "Friend", "Unknown2", fu_m_mid_max, 0.19)
+fu_m_mid_3$label <- "***"
+
+# UF（未知同性先順）の有意差
+# Female UF - Low組: Friend ≈ Unknown1, both > Unknown2
+uf_f_low_max <- max_vals %>% filter(order == "uf", gender == "f", percent_group == "Low") %>% pull(max_y)
+uf_f_low_1 <- create_bracket("uf", "f", "Low", "Friend", "Unknown2", uf_f_low_max, 0.05)
+uf_f_low_1$label <- "***"
+uf_f_low_2 <- create_bracket("uf", "f", "Low", "Unknown1", "Unknown2", uf_f_low_max, 0.12)
+uf_f_low_2$label <- "***"
+
+# Female UF - Middle組: Friend ≈ Unknown1, both > Unknown2
+uf_f_mid_max <- max_vals %>% filter(order == "uf", gender == "f", percent_group == "Middle") %>% pull(max_y)
+uf_f_mid_1 <- create_bracket("uf", "f", "Middle", "Friend", "Unknown2", uf_f_mid_max, 0.05)
+uf_f_mid_1$label <- "***"
+uf_f_mid_2 <- create_bracket("uf", "f", "Middle", "Unknown1", "Unknown2", uf_f_mid_max, 0.12)
+uf_f_mid_2$label <- "***"
+
+# Male UF - Low組: Friend ≈ Unknown1, both > Unknown2
+uf_m_low_max <- max_vals %>% filter(order == "uf", gender == "m", percent_group == "Low") %>% pull(max_y)
+uf_m_low_1 <- create_bracket("uf", "m", "Low", "Friend", "Unknown2", uf_m_low_max, 0.05)
+uf_m_low_1$label <- "***"
+uf_m_low_2 <- create_bracket("uf", "m", "Low", "Unknown1", "Unknown2", uf_m_low_max, 0.12)
+uf_m_low_2$label <- "***"
+
+# Male UF - Middle組: Friend ≈ Unknown1, both > Unknown2
+uf_m_mid_max <- max_vals %>% filter(order == "uf", gender == "m", percent_group == "Middle") %>% pull(max_y)
+uf_m_mid_1 <- create_bracket("uf", "m", "Middle", "Friend", "Unknown2", uf_m_mid_max, 0.05)
+uf_m_mid_1$label <- "***"
+uf_m_mid_2 <- create_bracket("uf", "m", "Middle", "Unknown1", "Unknown2", uf_m_mid_max, 0.12)
+uf_m_mid_2$label <- "***"
+
+# すべてのブラケットを結合
+sig_data <- rbind(
+  fu_f_low_1, fu_f_low_2, fu_f_low_3,
+  fu_f_mid_1, fu_f_mid_2, fu_f_mid_3,
+  fu_m_low_1, fu_m_low_2, fu_m_low_3,
+  fu_m_mid_1, fu_m_mid_2, fu_m_mid_3,
+  uf_f_low_1, uf_f_low_2,
+  uf_f_mid_1, uf_f_mid_2,
+  uf_m_low_1, uf_m_low_2,
+  uf_m_mid_1, uf_m_mid_2
+)
+
+# プロット作成
+p <- ggplot(plot_data, aes(x = percent_group, y = mean_value, 
+                           color = condition, group = condition)) +
+  geom_line(size = 1, position = position_dodge(width = 0.3)) +
+  geom_errorbar(aes(ymin = cin_l, ymax = cin_u), 
+                width = 0.3, size = 0.8,
+                position = position_dodge(width = 0.3)) +
+  geom_point(size = 2, position = position_dodge(width = 0.3)) +
+  # ブラケット
+  geom_segment(data = sig_data,
+               aes(x = x, xend = xend, y = y, yend = y),
+               inherit.aes = FALSE,
+               color = "black",
+               size = 0.4) +
+  geom_segment(data = sig_data,
+               aes(x = x, xend = x, y = y - 0.015, yend = y),
+               inherit.aes = FALSE,
+               color = "black",
+               size = 0.4) +
+  geom_segment(data = sig_data,
+               aes(x = xend, xend = xend, y = y - 0.015, yend = y),
+               inherit.aes = FALSE,
+               color = "black",
+               size = 0.4) +
+  # アスタリスク
+  geom_text(data = sig_data,
+            aes(x = (x + xend) / 2, y = y + 0.02, label = label),
+            inherit.aes = FALSE,
+            size = 4,
+            family = "Arial") +
+  facet_grid2(order ~ gender,
+              labeller = labeller(gender = c(f = "Female", m = "Male"),
+                                 order = c(fu = "FU", uf = "UF")),
+              axes = "all",
+              remove_labels = "all") +
+  scale_color_manual(
+    values = c("Friend" = "#9370DB", 
+               "Unknown1" = "#FFA500", 
+               "Unknown2" = "#4169E1"),
+    name = "Condition"
+  ) +
+  labs(x = "", y = "AOI Gaze Time (s)") +
+  scale_y_continuous(limits = c(0.4, 1.3), 
+                     breaks = seq(0.4, 1.2, 0.2)) +
+  theme_classic(base_family = "Arial") +
+  theme(
+    strip.background = element_blank(),
+    strip.text = element_text(size = 20, face = "bold", family = "Arial"),
+    axis.text = element_text(size = 15, family = "Arial"),
+    axis.title = element_text(size = 20, family = "Arial"),
+    legend.position = "bottom",
+    legend.title = element_text(size = 20, family = "Arial"),
+    legend.text = element_text(size = 15, family = "Arial"),
+    panel.spacing = unit(1, "lines")
+  )
+
+print(p)
+
+ggsave(
+  filename = "narrow_high_res_plot_3way_interaction.tiff",
+  plot = p,
+  width = 6,
+  height = 8,
+  units = "in",
+  dpi = 600
+)
+```
+
+###order組3次
+```{r}
+# 分割FU组数据
+fu_data <- all_gaze %>%
+  filter(order == "fu")%>%
+  select(-order)%>%
+  select(-gender)
+
+# 分析FU组的条件×百分比组交互
+anovakun(fu_data, "sAB", 
+         long = TRUE,
+         within = c("condition", "percent_group"), 
+         dv = "mean_total_gaze_time_ms_s",
+         auto = T,cin = T,peta = T)
+
+# 分割UF组数据
+uf_data <- all_gaze %>%
+  filter(order == "uf")%>%
+  select(-order)%>%
+  select(-gender)
+  
+# 分析UF组的条件×百分比组交互
+anovakun(uf_data, "sAB", 
+         long = TRUE,
+         within = c("condition", "percent_group"), 
+         dv = "mean_total_gaze_time_ms_s",
+         auto = T,cin = T,peta = T)
+```
+###condion組３次
+```{r}
+# 分割f组数据
+f_data <- all_gaze %>%
+  filter(condition == "f")%>%
+  select(-condition)%>%
+  select(-gender)
+
+# 分析FU组的条件×百分比组交互
+anovakun(f_data, "AsB", 
+         long = TRUE,
+         between = "order",
+         within = "percent_group", 
+         dv = "mean_time_left_half_ms_s",
+         eta = TRUE)
+
+# 分割u1组数据
+u1_data <- all_gaze %>%
+  filter(condition == "u1")%>%
+  select(-condition)%>%
+  select(-gender)
+  
+# 分析UF组的条件×百分比组交互
+anovakun(u1_data, "AsB", 
+         long = TRUE,
+         between = "order",
+         within = "percent_group", 
+         dv = "mean_time_left_half_ms_s",
+         eta = TRUE)
+
+# 分割u2组数据
+u2_data <- all_gaze %>%
+  filter(condition == "u2")%>%
+  select(-condition)%>%
+  select(-gender)
+  
+# 分析UF组的条件×百分比组交互
+anovakun(u2_data, "AsB", 
+         long = TRUE,
+         between = "order",
+         within = "percent_group", 
+         dv = "mean_time_left_half_ms_s",
+         eta = TRUE)
+```
+###percent組３次
+```{r}
+# 分割low组数据
+low_data <- all_gaze %>%
+  filter(percent_group == "low")%>%
+  select(-percent_group)%>%
+  select(-gender)
+anovakun(low_data, "AsB", 
+         long = TRUE,
+         between = "order",
+         within = "condition", 
+         dv = "mean_time_left_half_ms_s",
+         eta = TRUE)
+
+# 分割middle组数据
+middle_data <- all_gaze %>%
+  filter(percent_group == "middle")%>%
+  select(-percent_group)%>%
+  select(-gender)
+anovakun(middle_data, "AsB", 
+         long = TRUE,
+         between = "order",
+         within = "condition", 
+         dv = "mean_time_left_half_ms_s",
+         eta = TRUE)
+
+# 分割high组数据
+high_data <- all_gaze %>%
+  filter(percent_group == "high")%>%
+  select(-percent_group)%>%
+  select(-gender)
+anovakun(high_data, "AsB", 
+         long = TRUE,
+         between = "order",
+         within = "condition", 
+         dv = "mean_time_left_half_ms_s",
+         eta = TRUE)
+```
+
+```{r}
+all_gaze_ignoregender <- percent_data %>% 
+  mutate(mean_total_gaze_time_ms_s = mean_total_gaze_time_ms / 1000000) %>%
+  # 创建分组变量
+  mutate(percent_group = case_when(
+    percent >= 0 & percent <= 30 ~ "low",
+    percent >= 35 & percent <= 65 ~ "middle",
+    percent >= 70 & percent <= 100 ~ "high"
+  )) %>%
+  # 按ID、order、condition和分组计算均值（移除gender）
+  group_by(ID, order, condition, percent_group) %>%
+  summarise(
+    mean_total_gaze_time_ms_s = mean(mean_total_gaze_time_ms_s, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+# 运行ANOVA（移除gender因素）
+anovakun(all_gaze_ignoregender, "AsBC", 
+         long = TRUE, 
+         between = "order",
+         within = c("condition", "percent_group"), 
+         dv = "mean_total_gaze_time_ms_s",
+         eta = TRUE)
+```
+
+```{r}
+# 分割FU组数据
+fu_data <- all_gaze_ignoregender %>%
+  filter(order == "fu")%>%
+  select(-order)
+
+# 分析FU组的条件×百分比组交互
+anovakun(fu_data, "sAB", 
+         long = TRUE,
+         within = c("condition", "percent_group"), 
+         dv = "mean_total_gaze_time_ms_s",
+         eta = TRUE)
+# 分割UF组数据
+uf_data <- all_gaze_ignoregender %>%
+  filter(order == "uf")%>%
+  select(-order)
+# 分析UF组的条件×百分比组交互
+anovakun(uf_data, "sAB", 
+         long = TRUE,
+         within = c("condition", "percent_group"), 
+         dv = "mean_total_gaze_time_ms_s",
+         eta = TRUE)
+```
+
+####右視野
+```{r}
+all_gaze <- percent_data %>% 
+  mutate(mean_time_right_half_ms_s = mean_time_right_half_ms / 1000000) %>%
+  # 创建分组变量
+  mutate(percent_group = case_when(
+    percent >= 0 & percent <= 30 ~ "low",
+    percent >= 35 & percent <= 65 ~ "middle",
+    percent >= 70 & percent <= 100 ~ "high"
+  )) %>%
+  # 按ID、order、gender、condition和分组计算均值
+  group_by(ID, order, gender, condition, percent_group) %>%
+  summarise(
+    mean_gaze_time_s = mean(mean_time_right_half_ms_s, na.rm = TRUE),
+    .groups = "drop"
+  )
+anovakun(all_gaze, "ABsCD", 
+         long = TRUE, 
+         between = c("order", "gender"),
+         within = c("condition", "percent_group"), 
+         dv = "mean_time_right_half_ms_s",
+         eta = TRUE)
+```
+
+
+##########左視野3group
+```{r}
+all_gaze <- percent_data %>% 
+  mutate(mean_time_left_half_ms_s = mean_time_left_half_ms / 1000000) %>%
+  # 创建分组变量
+  mutate(percent_group = case_when(
+    percent >= 0 & percent <= 30 ~ "low",
+    percent >= 35 & percent <= 65 ~ "middle",
+    percent >= 70 & percent <= 100 ~ "high"
+  )) %>%
+  # 按ID、order、gender、condition和分组计算均值
+  group_by(ID, order, gender, condition, percent_group) %>%
+  summarise(
+    mean_gaze_time_s = mean(mean_time_left_half_ms_s, na.rm = TRUE),
+    .groups = "drop"
+  )
+anovakun(all_gaze, "ABsCD", 
+         long = TRUE, 
+         between = c("order", "gender"),
+         within = c("condition", "percent_group"), 
+         dv = "mean_time_left_half_ms_s",
+         auto = T,cin = T,peta = T)
+```
+```{r}
+library(ggplot2)
+library(dplyr)
+library(extrafont)
+library(ggh4x)
+
+# 新しいデータを作成
+plot_data <- data.frame(
+  order = c(
+    rep("uf", 9), rep("uf", 9),
+    rep("fu", 9), rep("fu", 9)
+  ),
+  gender = c(
+    rep("m", 9), rep("f", 9),
+    rep("m", 9), rep("f", 9)
+  ),
+  condition = rep(c("f", "f", "f", "u1", "u1", "u1", "u2", "u2", "u2"), 4),
+  percent_group = rep(c("high", "low", "middle"), 12),
+  mean_value = c(
+    # uf-m
+    0.3700, 0.3483, 0.4115, 0.4255, 0.3656, 0.4490, 0.3841, 0.3255, 0.3920,
+    # uf-f
+    0.3193, 0.2623, 0.3187, 0.2670, 0.2439, 0.2911, 0.3045, 0.2270, 0.2719,
+    # fu-m
+    0.3576, 0.2905, 0.3840, 0.3312, 0.2661, 0.3237, 0.2754, 0.2453, 0.2781,
+    # fu-f
+    0.3859, 0.3668, 0.4578, 0.3727, 0.3115, 0.3681, 0.3938, 0.3044, 0.3574
+  ),
+  cin_l = c(
+    # uf-m
+    0.3315, 0.3142, 0.3688, 0.3674, 0.3330, 0.3967, 0.3292, 0.2842, 0.3563,
+    # uf-f
+    0.2821, 0.2325, 0.2805, 0.2406, 0.2238, 0.2680, 0.2602, 0.1940, 0.2267,
+    # fu-m
+    0.2539, 0.2309, 0.3014, 0.2513, 0.2199, 0.2556, 0.2057, 0.1852, 0.2108,
+    # fu-f
+    0.3473, 0.3230, 0.4010, 0.3219, 0.2919, 0.3370, 0.3575, 0.2624, 0.3165
+  ),
+  cin_u = c(
+    # uf-m
+    0.4085, 0.3823, 0.4542, 0.4837, 0.3982, 0.5013, 0.4390, 0.3668, 0.4277,
+    # uf-f
+    0.3566, 0.2922, 0.3568, 0.2935, 0.2641, 0.3142, 0.3488, 0.2600, 0.3171,
+    # fu-m
+    0.4613, 0.3502, 0.4666, 0.4111, 0.3122, 0.3918, 0.3450, 0.3053, 0.3454,
+    # fu-f
+    0.4245, 0.4105, 0.5147, 0.4235, 0.3310, 0.3993, 0.4301, 0.3464, 0.3982
+  )
+)
+
+# percent_groupのファクター設定
+plot_data$percent_group <- factor(plot_data$percent_group,
+                                   levels = c("low", "middle", "high"),
+                                   labels = c("Low", "Middle", "High"))
+
+# conditionのファクター設定
+plot_data$condition <- factor(plot_data$condition,
+                               levels = c("f", "u1", "u2"),
+                               labels = c("Friend", "Unknown1", "Unknown2"))
+
+# プロット作成
+p <- ggplot(plot_data, aes(x = percent_group, y = mean_value, 
+                           color = condition, group = condition)) +
+  geom_line(size = 1) +
+  geom_errorbar(aes(ymin = cin_l, ymax = cin_u), 
+                width = 0.1, size = 0.8) +
+  facet_grid2(order ~ gender,
+              labeller = labeller(gender = c(f = "Female", m = "Male"),
+                                 order = c(fu = "FU", uf = "UF")),
+              axes = "all",
+              remove_labels = "x") +
+  scale_color_manual(
+    values = c("Friend" = "#9370DB", 
+               "Unknown1" = "#FFA500", 
+               "Unknown2" = "#4169E1"),
+    name = "Condition"
+  ) +
+  labs(x = "", y = "Left AOI Gaze Time (s)") +  # y軸ラベルを変更
+  scale_y_continuous(limits = c(0.1, 0.6),       # y軸範囲を変更
+                     breaks = seq(0.1, 0.6, 0.1)) +  # 目盛りも調整
+  theme_classic(base_family = "Arial") +
+  theme(
+    strip.background = element_blank(),
+    strip.text = element_text(size = 15, face = "bold", family = "Arial"),
+    axis.text = element_text(size = 15, family = "Arial"),
+    axis.title = element_text(size = 15, family = "Arial"),
+    legend.position = "bottom",
+    legend.title = element_text(size = 15, family = "Arial"),
+    legend.text = element_text(size = 12, family = "Arial"),
+    panel.spacing = unit(1, "lines")
+  )
+
+print(p)
+```
+```{r}
+library(ggplot2)
+library(dplyr)
+library(extrafont)
+library(ggh4x)
+
+# データ準備
+plot_data <- data.frame(
+  order = c(
+    rep("uf", 9), rep("uf", 9),
+    rep("fu", 9), rep("fu", 9)
+  ),
+  gender = c(
+    rep("m", 9), rep("f", 9),
+    rep("m", 9), rep("f", 9)
+  ),
+  condition = rep(c("f", "f", "f", "u1", "u1", "u1", "u2", "u2", "u2"), 4),
+  percent_group = rep(c("high", "low", "middle"), 12),
+  mean_value = c(
+    # uf-m
+    0.3700, 0.3483, 0.4115, 0.4255, 0.3656, 0.4490, 0.3841, 0.3255, 0.3920,
+    # uf-f
+    0.3193, 0.2623, 0.3187, 0.2670, 0.2439, 0.2911, 0.3045, 0.2270, 0.2719,
+    # fu-m
+    0.3576, 0.2905, 0.3840, 0.3312, 0.2661, 0.3237, 0.2754, 0.2453, 0.2781,
+    # fu-f
+    0.3859, 0.3668, 0.4578, 0.3727, 0.3115, 0.3681, 0.3938, 0.3044, 0.3574
+  ),
+  cin_l = c(
+    # uf-m
+    0.3315, 0.3142, 0.3688, 0.3674, 0.3330, 0.3967, 0.3292, 0.2842, 0.3563,
+    # uf-f
+    0.2821, 0.2325, 0.2805, 0.2406, 0.2238, 0.2680, 0.2602, 0.1940, 0.2267,
+    # fu-m
+    0.2539, 0.2309, 0.3014, 0.2513, 0.2199, 0.2556, 0.2057, 0.1852, 0.2108,
+    # fu-f
+    0.3473, 0.3230, 0.4010, 0.3219, 0.2919, 0.3370, 0.3575, 0.2624, 0.3165
+  ),
+  cin_u = c(
+    # uf-m
+    0.4085, 0.3823, 0.4542, 0.4837, 0.3982, 0.5013, 0.4390, 0.3668, 0.4277,
+    # uf-f
+    0.3566, 0.2922, 0.3568, 0.2935, 0.2641, 0.3142, 0.3488, 0.2600, 0.3171,
+    # fu-m
+    0.4613, 0.3502, 0.4666, 0.4111, 0.3122, 0.3918, 0.3450, 0.3053, 0.3454,
+    # fu-f
+    0.4245, 0.4105, 0.5147, 0.4235, 0.3310, 0.3993, 0.4301, 0.3464, 0.3982
+  )
+)
+
+plot_data$percent_group <- factor(plot_data$percent_group,
+                                   levels = c("low", "middle", "high"),
+                                   labels = c("Low", "Middle", "High"))
+
+plot_data$condition <- factor(plot_data$condition,
+                               levels = c("f", "u1", "u2"),
+                               labels = c("Friend", "Unknown1", "Unknown2"))
+
+# dodge幅を設定
+dodge_width <- 0.15
+
+# 女性のFriend条件のMiddle組とHigh組の最大値を取得
+fu_f_friend_data <- plot_data %>% 
+  filter(order == "fu", gender == "f", condition == "Friend", 
+         percent_group %in% c("Middle", "High"))
+
+# Middle組のFriend条件のY座標（dodgeを考慮）
+middle_y <- fu_f_friend_data %>% filter(percent_group == "Middle") %>% pull(cin_u)
+high_y <- fu_f_friend_data %>% filter(percent_group == "High") %>% pull(cin_u)
+
+# ブラケットの高さ（2つのうち高い方に基づく）
+bracket_y <- max(middle_y, high_y) + 0.04
+
+# 有意差標記データ（女性のFU Friend条件のMiddle vs Highのみ）
+sig_data <- data.frame(
+  order = "fu",
+  gender = "f",
+  condition = "Friend",
+  x = 2,      # Middle組の位置
+  xend = 3,   # High組の位置
+  y = bracket_y,
+  label = "***"
+)
+
+# プロット作成
+p <- ggplot(plot_data, aes(x = percent_group, y = mean_value, 
+                           color = condition, group = condition)) +
+  geom_line(size = 1, position = position_dodge(width = dodge_width)) +
+  geom_errorbar(aes(ymin = cin_l, ymax = cin_u), 
+                width = 0.3, size = 0.8,
+                position = position_dodge(width = dodge_width)) +
+  geom_point(size = 2, position = position_dodge(width = dodge_width)) +
+  # ブラケット（水平線）
+  geom_segment(data = sig_data,
+               aes(x = x, xend = xend, y = y, yend = y),
+               inherit.aes = FALSE,
+               color = "black",
+               size = 0.4) +
+  # ブラケット（左垂直線）
+  geom_segment(data = sig_data,
+               aes(x = x, xend = x, y = y - 0.012, yend = y),
+               inherit.aes = FALSE,
+               color = "black",
+               size = 0.4) +
+  # ブラケット（右垂直線）
+  geom_segment(data = sig_data,
+               aes(x = xend, xend = xend, y = y - 0.012, yend = y),
+               inherit.aes = FALSE,
+               color = "black",
+               size = 0.4) +
+  # アスタリスク
+  geom_text(data = sig_data,
+            aes(x = (x + xend) / 2, y = y + 0.018, label = label),
+            inherit.aes = FALSE,
+            size = 3.5,
+            family = "Arial") +
+  facet_grid2(order ~ gender,
+              labeller = labeller(gender = c(f = "Female", m = "Male"),
+                                 order = c(fu = "FU", uf = "UF")),
+              axes = "all",
+              remove_labels = "x") +
+  scale_color_manual(
+    values = c("Friend" = "#9370DB", 
+               "Unknown1" = "#FFA500", 
+               "Unknown2" = "#4169E1"),
+    name = "Condition"
+  ) +
+  labs(x = "", y = "Left AOI Gaze Time (s)") +
+  scale_y_continuous(limits = c(0.1, 0.65),
+                     breaks = seq(0.1, 0.6, 0.1)) +
+  theme_classic(base_family = "Arial") +
+  theme(
+    strip.background = element_blank(),
+    strip.text = element_text(size = 15, face = "bold", family = "Arial"),
+    axis.text = element_text(size = 15, family = "Arial"),
+    axis.title = element_text(size = 15, family = "Arial"),
+    legend.position = "bottom",
+    legend.title = element_text(size = 15, family = "Arial"),
+    legend.text = element_text(size = 12, family = "Arial"),
+    panel.spacing = unit(1, "lines")
+  )
+
+print(p)
+
+ggsave(
+  filename = "left_aoi_simple_sig.tiff",
+  plot = p,
+  width = 6,
+  height = 8,
+  units = "in",
+  dpi = 600
+)
+```
+
+###order組3次
+```{r}
+# 分割FU组数据
+fu_data <- all_gaze %>%
+  filter(order == "fu")%>%
+  select(-order)%>%
+  select(-gender)
+
+# 分析FU组的条件×百分比组交互
+anovakun(fu_data, "sAB", 
+         long = TRUE,
+         within = c("condition", "percent_group"), 
+         dv = "mean_time_left_half_ms_s",
+         eta = TRUE)
+
+# 分割UF组数据
+uf_data <- all_gaze %>%
+  filter(order == "uf")%>%
+  select(-order)%>%
+  select(-gender)
+  
+# 分析UF组的条件×百分比组交互
+anovakun(uf_data, "sAB", 
+         long = TRUE,
+         within = c("condition", "percent_group"), 
+         dv = "mean_time_left_half_ms_s",
+         eta = TRUE)
+```
+###condion組３次
+```{r}
+# 分割f组数据
+f_data <- all_gaze %>%
+  filter(condition == "f")%>%
+  select(-condition)%>%
+  select(-gender)
+
+# 分析FU组的条件×百分比组交互
+anovakun(f_data, "AsB", 
+         long = TRUE,
+         between = "order",
+         within = "percent_group", 
+         dv = "mean_time_left_half_ms_s",
+         eta = TRUE)
+
+# 分割u1组数据
+u1_data <- all_gaze %>%
+  filter(condition == "u1")%>%
+  select(-condition)%>%
+  select(-gender)
+  
+# 分析UF组的条件×百分比组交互
+anovakun(u1_data, "AsB", 
+         long = TRUE,
+         between = "order",
+         within = "percent_group", 
+         dv = "mean_time_left_half_ms_s",
+         eta = TRUE)
+
+# 分割u2组数据
+u2_data <- all_gaze %>%
+  filter(condition == "u2")%>%
+  select(-condition)%>%
+  select(-gender)
+  
+# 分析UF组的条件×百分比组交互
+anovakun(u2_data, "AsB", 
+         long = TRUE,
+         between = "order",
+         within = "percent_group", 
+         dv = "mean_time_left_half_ms_s",
+         eta = TRUE)
+```
+###percent組３次
+```{r}
+# 分割low组数据
+low_data <- all_gaze %>%
+  filter(percent_group == "low")%>%
+  select(-percent_group)%>%
+  select(-gender)
+anovakun(low_data, "AsB", 
+         long = TRUE,
+         between = "order",
+         within = "condition", 
+         dv = "mean_time_left_half_ms_s",
+         auto = T,cin = T,peta = T)
+
+# 分割middle组数据
+middle_data <- all_gaze %>%
+  filter(percent_group == "middle")%>%
+  select(-percent_group)%>%
+  select(-gender)
+anovakun(middle_data, "AsB", 
+         long = TRUE,
+         between = "order",
+         within = "condition", 
+         dv = "mean_time_left_half_ms_s",
+         auto = T,cin = T,peta = T)
+
+# 分割high组数据
+high_data <- all_gaze %>%
+  filter(percent_group == "high")%>%
+  select(-percent_group)%>%
+  select(-gender)
+anovakun(high_data, "AsB", 
+         long = TRUE,
+         between = "order",
+         within = "condition", 
+         dv = "mean_time_left_half_ms_s",
+         auto = T,cin = T,peta = T)
+```
+
+###order組4次
+```{r}
+# 分割FU组数据
+fu_data <- all_gaze %>%
+  filter(order == "fu")%>%
+  select(-order)
+
+# 分析FU组的条件×百分比组交互
+anovakun(fu_data, "AsBC", 
+         long = TRUE,
+         between = "gender",
+         within = c("condition", "percent_group"), 
+         dv = "mean_time_left_half_ms_s",
+         eta = TRUE)
+
+# 分割UF组数据
+uf_data <- all_gaze %>%
+  filter(order == "uf")%>%
+  select(-order)
+  
+# 分析UF组的条件×百分比组交互
+anovakun(uf_data, "AsBC", 
+         long = TRUE,
+         between = "gender",
+         within = c("condition", "percent_group"), 
+         dv = "mean_time_left_half_ms_s",
+         eta = TRUE)
+```
+###fu-gender
+```{r}
+# 分割Female组数据
+fuf_data <- fu_data %>%
+  filter(gender == "f")%>%
+  select(-gender)
+anovakun(fuf_data, "sAB", 
+         long = TRUE,
+         within = c("condition", "percent_group"), 
+         dv = "mean_time_left_half_ms_s",
+         eta = TRUE)
+
+# 分割male组数据
+fum_data <- fu_data %>%
+  filter(gender == "m")%>%
+  select(-gender)
+anovakun(fum_data, "sAB", 
+         long = TRUE,
+         within = c("condition", "percent_group"), 
+         dv = "mean_time_left_half_ms_s",
+         eta = TRUE)
+```
+###fu-condition
+```{r}
+# 分割f组数据
+fuf_data <- fu_data %>%
+  filter(condition == "f")%>%
+  select(-condition)
+anovakun(fuf_data, "AsB", 
+         long = TRUE,
+         between = "gender",
+         within ="percent_group",
+         dv = "mean_time_left_half_ms_s",
+         eta = TRUE)
+# 分割u1组数据
+fuu1_data <- fu_data %>%
+  filter(condition == "u1")%>%
+  select(-condition)
+anovakun(fuu1_data, "AsB", 
+         long = TRUE,
+         between = "gender",
+         within ="percent_group",
+         dv = "mean_time_left_half_ms_s",
+         eta = TRUE)
+# 分割u2组数据
+fuu2_data <- fu_data %>%
+  filter(condition == "u2")%>%
+  select(-condition)
+anovakun(fuu2_data, "AsB", 
+         long = TRUE,
+         between = "gender",
+         within ="percent_group",
+         dv = "mean_time_left_half_ms_s",
+         eta = TRUE)
+```
+###fu-percent
+```{r}
+# 分割low组数据
+fulow_data <- fu_data %>%
+  filter(percent_group == "low")%>%
+  select(-percent_group)
+anovakun(fulow_data, "AsB", 
+         long = TRUE,
+         between = "gender",
+         within ="condition",
+         dv = "mean_time_left_half_ms_s",
+         eta = TRUE)
+# 分割middle组数据
+fumiddle_data <- fu_data %>%
+  filter(percent_group == "middle")%>%
+  select(-percent_group)
+anovakun(fumiddle_data, "AsB", 
+         long = TRUE,
+         between = "gender",
+         within ="condition",
+         dv = "mean_time_left_half_ms_s",
+         eta = TRUE)
+# 分割high组数据
+fuhigh_data <- fu_data %>%
+  filter(percent_group == "high")%>%
+  select(-percent_group)
+anovakun(fuhigh_data, "AsB", 
+         long = TRUE,
+         between = "gender",
+         within ="condition",
+         dv = "mean_time_left_half_ms_s",
+         eta = TRUE)
+```
+
+###gender組4次
+```{r}
+# 分割Female组数据
+f_data <- all_gaze %>%
+  filter(gender == "f")%>%
+  select(-gender)
+anovakun(f_data, "AsBC", 
+         long = TRUE,
+         between = "order",
+         within = c("condition", "percent_group"), 
+         dv = "mean_time_left_half_ms_s",
+         auto = T,cin = T,peta = T)
+
+# 分割male组数据
+m_data <- all_gaze %>%
+  filter(gender == "m")%>%
+  select(-gender)
+anovakun(m_data, "AsBC", 
+         long = TRUE,
+         between = "order",
+         within = c("condition", "percent_group"), 
+         dv = "mean_time_left_half_ms_s",
+         auto = T,cin = T,peta = T)
+```
+###male
+```{r}
+mfu_data <- m_data %>%
+  filter(order == "fu")%>%
+  select(-order)
+anovakun(mfu_data, "sAB", 
+         long = TRUE,
+         within = c("condition", "percent_group"), 
+         dv = "mean_time_left_half_ms_s",
+         auto = T,cin = T,peta = T)
+# 分割uf组数据
+muf_data <- m_data %>%
+  filter(order == "uf")%>%
+  select(-order)
+anovakun(muf_data, "sAB", 
+         long = TRUE,
+         within = c("condition", "percent_group"), 
+         dv = "mean_time_left_half_ms_s",
+         auto = T,cin = T,peta = T)
+```
+
+
+###f-order
+```{r}
+# 分割Fu组数据
+ffu_data <- f_data %>%
+  filter(order == "fu")%>%
+  select(-order)
+anovakun(fuf_data, "sAB", 
+         long = TRUE,
+         within = c("condition", "percent_group"), 
+         dv = "mean_time_left_half_ms_s",
+         eta = TRUE)
+# 分割uf组数据
+fuf_data <- f_data %>%
+  filter(order == "uf")%>%
+  select(-order)
+anovakun(fuf_data, "sAB", 
+         long = TRUE,
+         within = c("condition", "percent_group"), 
+         dv = "mean_time_left_half_ms_s",
+         eta = TRUE)
+```
+###f-conditon
+```{r}
+# 分割F组数据
+ff_data <- f_data %>%
+  filter(condition == "f")%>%
+  select(-condition)
+anovakun(ff_data, "AsB", 
+         long = TRUE,
+         between = "order",
+         within = "percent_group", 
+         dv = "mean_time_left_half_ms_s",
+         auto = T,cin = T,peta = T)
+# 分割u1组数据
+fu1_data <- f_data %>%
+  filter(condition == "u1")%>%
+  select(-condition)
+anovakun(fu1_data, "AsB", 
+         long = TRUE,
+         between = "order",
+         within = "percent_group", 
+         dv = "mean_time_left_half_ms_s",
+         auto = T,cin = T,peta = T)
+# 分割u2组数据
+fu2_data <- f_data %>%
+  filter(condition == "u2")%>%
+  select(-condition)
+anovakun(fu2_data, "AsB", 
+         long = TRUE,
+         between = "order",
+         within = "percent_group", 
+         dv = "mean_time_left_half_ms_s",
+         auto = T,cin = T,peta = T)
+```
+###f-percent
+```{r}
+# 分割low组数据
+flow_data <- f_data %>%
+  filter(percent_group == "low")%>%
+  select(-percent_group)
+anovakun(flow_data, "AsB", 
+         long = TRUE,
+         between = "order",
+         within ="condition",
+         dv = "mean_time_left_half_ms_s",
+         eta = TRUE)
+# 分割middle组数据
+fmiddle_data <- f_data %>%
+  filter(percent_group == "middle")%>%
+  select(-percent_group)
+anovakun(fmiddle_data, "AsB", 
+         long = TRUE,
+         between = "order",
+         within ="condition",
+         dv = "mean_time_left_half_ms_s",
+         eta = TRUE)
+# 分割high组数据
+fhigh_data <- f_data %>%
+  filter(percent_group == "high")%>%
+  select(-percent_group)
+anovakun(fhigh_data, "AsB", 
+         long = TRUE,
+         between = "order",
+         within ="condition",
+         dv = "mean_time_left_half_ms_s",
+         eta = TRUE)
+```
+
+
+###condition4次
+```{r}
+# 分割F组数据
+f_data <- all_gaze %>%
+  filter(condition == "f")%>%
+  select(-condition)
+anovakun(f_data, "ABsC", 
+         long = TRUE,
+         between = c("order","gender"),
+         within = "percent_group", 
+         dv = "mean_time_left_half_ms_s",
+         eta = TRUE)
+# 分割u1组数据
+u1_data <- all_gaze %>%
+  filter(condition == "u1")%>%
+  select(-condition)
+anovakun(u1_data, "ABsC", 
+         long = TRUE,
+         between = c("order","gender"),
+         within = "percent_group", 
+         dv = "mean_time_left_half_ms_s",
+         eta = TRUE)
+# 分割u2组数据
+u2_data <- all_gaze %>%
+  filter(condition == "u2")%>%
+  select(-condition)
+anovakun(u2_data, "ABsC", 
+         long = TRUE,
+         between = c("order","gender"),
+         within = "percent_group", 
+         dv = "mean_time_left_half_ms_s",
+         eta = TRUE)
+```
+###f-order
+```{r}
+# 分割Fu组数据
+ffu_data <- f_data %>%
+  filter(order == "fu")%>%
+  select(-order)
+anovakun(ffu_data, "AsB", 
+         long = TRUE,
+         between = "gender",
+         within = "percent_group", 
+         dv = "mean_time_left_half_ms_s",
+         eta = TRUE)
+# 分割uf组数据
+fuf_data <- f_data %>%
+  filter(order == "uf")%>%
+  select(-order)
+anovakun(fuf_data, "AsB", 
+         long = TRUE,
+         between = "gender",
+         within = "percent_group", 
+         dv = "mean_time_left_half_ms_s",
+         eta = TRUE)
+```
+
+###f-gender
+```{r}
+# 分割Female组数据
+ff_data <- f_data %>%
+  filter(gender == "f")%>%
+  select(-gender)
+anovakun(ff_data, "AsB", 
+         long = TRUE,
+         between = "order",
+         within = "percent_group", 
+         dv = "mean_time_left_half_ms_s",
+         eta = TRUE)
+
+# 分割male组数据
+fm_data <- f_data %>%
+  filter(gender == "m")%>%
+  select(-gender)
+anovakun(fm_data, "AsB", 
+         long = TRUE,
+         between = "order",
+         within = "percent_group", 
+         dv = "mean_time_left_half_ms_s",
+         eta = TRUE)
+```
+###f-percent
+```{r}
+# 分割low组数据
+flow_data <- f_data %>%
+  filter(percent_group == "low")%>%
+  select(-percent_group)
+anovakun(flow_data, "ABs", 
+         long = TRUE,
+         between = c("order","gender"),
+         dv = "mean_time_left_half_ms_s",
+         eta = TRUE)
+# 分割middle组数据
+fmiddle_data <- f_data %>%
+  filter(percent_group == "middle")%>%
+  select(-percent_group)
+anovakun(fmiddle_data, "ABs", 
+         long = TRUE,
+         between = c("order","gender"),
+         dv = "mean_time_left_half_ms_s",
+         eta = TRUE)
+# 分割low组数据
+fhigh_data <- f_data %>%
+  filter(percent_group == "high")%>%
+  select(-percent_group)
+anovakun(fhigh_data, "ABs", 
+         long = TRUE,
+         between = c("order","gender"),
+         dv = "mean_time_left_half_ms_s",
+         eta = TRUE)
+```
+
+###percent4次
+```{r}
+# 分割low组数据
+low_data <- all_gaze %>%
+  filter(percent_group == "low")%>%
+  select(-percent_group)
+anovakun(low_data, "ABsC", 
+         long = TRUE,
+         between = c("order","gender"),
+         within = "condition", 
+         dv = "mean_time_left_half_ms_s",
+         auto = T,cin = T,peta = T)
+# 分割middle组数据
+middle_data <- all_gaze %>%
+  filter(percent_group == "middle")%>%
+  select(-percent_group)
+anovakun(middle_data, "ABsC", 
+         long = TRUE,
+         between = c("order","gender"),
+         within = "condition", 
+         dv = "mean_time_left_half_ms_s",
+         auto = T,cin = T,peta = T)
+# 分割high组数据
+high_data <- all_gaze %>%
+  filter(percent_group == "high")%>%
+  select(-percent_group)
+anovakun(high_data, "ABsC", 
+         long = TRUE,
+         between = c("order","gender"),
+         within = "condition", 
+         dv = "mean_time_left_half_ms_s",
+         auto = T,cin = T,peta = T)
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+```{r}
+all_gaze <- percent_data %>% 
+  mutate(mean_time_left_half_ms_s = mean_time_left_half_ms / 1000000) %>%
+  # 创建分组变量
+  mutate(percent_group = case_when(
+    percent >= 0 & percent <= 30 ~ "low",
+    percent >= 35 & percent <= 65 ~ "middle",
+    percent >= 70 & percent <= 100 ~ "high"
+  )) %>%
+  # 按ID、order、condition和分组计算均值（移除gender）
+  group_by(ID, order, condition, percent_group) %>%
+  summarise(
+    mean_time_left_half_ms_s = mean(mean_time_left_half_ms_s, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+# 运行ANOVA（移除gender因素）
+anovakun(all_gaze, "AsBC", 
+         long = TRUE, 
+         between = "order",
+         within = c("condition", "percent_group"), 
+         dv = "mean_time_left_half_ms_s",
+         eta = TRUE)
+```
+
+
+```{r}
+# 分割FU组数据
+fu_data <- all_gaze_ignoregender %>%
+  filter(order == "fu")%>%
+  select(-order)
+
+# 分析FU组的条件×百分比组交互
+anovakun(fu_data, "sAB", 
+         long = TRUE,
+         within = c("condition", "percent_group"), 
+         dv = "mean_time_left_half_ms_s",
+         eta = TRUE)
+
+# 分割UF组数据
+uf_data <- all_gaze_ignoregender %>%
+  filter(order == "uf")%>%
+  select(-order)
+# 分析UF组的条件×百分比组交互
+anovakun(uf_data, "sAB", 
+         long = TRUE,
+         within = c("condition", "percent_group"), 
+         dv = "mean_time_left_half_ms_s",
+         eta = TRUE)
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+###order
+```{r}
+# FU组
+fu_data <- all_gaze %>%  # 使用原始包含gender的数据
+  filter(order == "fu") %>%
+  select(-order)
+
+anovakun(fu_data, "AsBC", 
+         long = TRUE,
+         between = "gender",
+         within = c("condition", "percent_group"), 
+         dv = "mean_time_left_half_ms_s",
+         eta = TRUE)
+
+# UF组
+uf_data <- all_gaze %>%  # 使用原始包含gender的数据
+  filter(order == "uf") %>%
+  select(-order)
+
+anovakun(uf_data, "AsBC", 
+         long = TRUE,
+         between = "gender",
+         within = c("condition", "percent_group"), 
+         dv = "mean_time_left_half_ms_s",
+         eta = TRUE)
+```
+####order-gender
+```{r}
+# FU-female组
+fuf_data <- fu_data %>%  # 使用原始包含gender的数据
+  filter(gender == "f") %>%
+  select(-gender)
+
+anovakun(fuf_data, "sAB", 
+         long = TRUE,
+         within = c("condition", "percent_group"), 
+         dv = "mean_time_left_half_ms_s",
+         eta = TRUE)
+
+# FU-female组
+fum_data <- fu_data %>%  # 使用原始包含gender的数据
+  filter(gender == "m") %>%
+  select(-gender)
+
+anovakun(fum_data, "sAB", 
+         long = TRUE,
+         within = c("condition", "percent_group"), 
+         dv = "mean_time_left_half_ms_s",
+         eta = TRUE)
+```
+
+
+condition
+```{r}
+# F组
+f_data <- all_gaze %>%  # 使用原始包含gender的数据
+  filter(condition == "f") %>%
+  select(-condition)
+
+anovakun(f_data, "ABsC", 
+         long = TRUE,
+         between = c("order","gender"),
+         within = "percent_group", 
+         dv = "mean_time_left_half_ms_s",
+         eta = TRUE)
+
+# U1组
+u1_data <- all_gaze %>%  # 使用原始包含gender的数据
+  filter(condition == "u1") %>%
+  select(-condition)
+
+anovakun(u1_data, "ABsC", 
+         long = TRUE,
+         between = c("order","gender"),
+         within = "percent_group", 
+         dv = "mean_time_left_half_ms_s",
+         eta = TRUE)
+
+# U2组
+u2_data <- all_gaze %>%  # 使用原始包含gender的数据
+  filter(condition == "u2") %>%
+  select(-condition)
+
+anovakun(u2_data, "ABsC", 
+         long = TRUE,
+         between = c("order","gender"),
+         within = "percent_group", 
+         dv = "mean_time_left_half_ms_s",
+         eta = TRUE)
+```
+###friend-gender
+```{r}
+ff_data <- f_data %>%  # 使用原始包含gender的数据
+  filter(gender == "f") %>%
+  select(-gender)
+
+anovakun(ff_data, "AsB", 
+         long = TRUE,
+         between = "order",
+         between = "percent_group",
+         dv = "mean_time_left_half_ms_s",
+         eta = TRUE)
+
+ fm_data <- f_data %>%  # 使用原始包含gender的数据
+  filter(gender == "m") %>%
+  select(-gender)
+
+anovakun(fm_data, "AsB", 
+         long = TRUE,
+         between = "order",
+         between = "percent_group",
+         dv = "mean_time_left_half_ms_s",
+         eta = TRUE)
+```
+
+
+percent_group
+```{r}
+# low组
+l_data <- all_gaze %>%  # 使用原始包含gender的数据
+  filter(percent_group == "low") %>%
+  select(-percent_group)
+
+anovakun(l_data, "ABsC", 
+         long = TRUE,
+         between = c("order","gender"),
+         within = "condition", 
+         dv = "mean_time_left_half_ms_s",
+         eta = TRUE)
+
+#middle组
+m_data <- all_gaze %>%  # 使用原始包含gender的数据
+  filter(percent_group == "middle") %>%
+  select(-percent_group)
+
+anovakun(m_data, "ABsC", 
+         long = TRUE,
+         between = c("order","gender"),
+         within = "condition", 
+         dv = "mean_time_left_half_ms_s",
+         eta = TRUE)
+
+# high组
+h_data <- all_gaze %>%  # 使用原始包含gender的数据
+  filter(percent_group == "high") %>%
+  select(-percent_group)
+
+anovakun(h_data, "ABsC", 
+         long = TRUE,
+         between = c("order","gender"),
+         within = "condition", 
+         dv = "mean_time_left_half_ms_s",
+         eta = TRUE)
+```
+
+```{r}
+write.csv(percent_data, "percent_data.csv", row.names = FALSE, fileEncoding = "UTF-8")
+print("数据已保存到: percent_data.csv")
+```
+```{r}
+all_gaze <- percent_data %>% 
+  mutate(mean_time_left_half_ms_s = mean_time_left_half_ms / 1000000) %>%
+  mutate(mean_time_right_half_ms_s = mean_time_right_half_ms / 1000000) %>%
+  mutate(mean_total_gaze_time_ms_s = mean_total_gaze_time_ms / 1000000) %>%
+  # 创建分组变量
+  mutate(percent_group = case_when(
+    percent >= 0 & percent <= 30 ~ "low",
+    percent >= 35 & percent <= 65 ~ "middle",
+    percent >= 70 & percent <= 100 ~ "high"
+  )) %>%
+  # 按ID、order、gender、condition和分组计算均值
+  group_by(ID, order, gender, condition, percent_group) %>%
+  summarise(
+    mean_left_gaze_time_s = mean(mean_time_left_half_ms_s, na.rm = TRUE),
+    mean_right_gaze_time_s = mean(mean_time_right_half_ms_s, na.rm = TRUE),
+    mean_total_gaze_time_s = mean(mean_total_gaze_time_ms_s, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+write.csv(all_gaze, "fixation_data.csv", row.names = FALSE, fileEncoding = "UTF-8")
+print("数据已保存到: fixation_data.csv")
+```
+
+```{r}
+aq_data <- read.csv("fixation_data_withAQ.csv")
+```
+
+```{r}
+haq <- subset(aq_data,percent_group=="high")
+maq <- subset(aq_data,percent_group=="middle")
+laq <- subset(aq_data,percent_group=="low")
+
+# 方法1: 使用dplyr分组计算相关系数
+correlation_results <- haq %>%
+  group_by(condition) %>%
+  summarise(
+    correlation = cor(mean_left_gaze_time_s, AQ, use = "complete.obs"),
+    p_value = cor.test(mean_left_gaze_time_s, AQ)$p.value,
+    n = sum(!is.na(mean_left_gaze_time_s) & !is.na(AQ))
+  )
+print(correlation_results)
+
+correlation_results2 <- maq %>%
+  group_by(condition) %>%
+  summarise(
+    correlation = cor(mean_left_gaze_time_s, AQ, use = "complete.obs"),
+    p_value = cor.test(mean_left_gaze_time_s, AQ)$p.value,
+    n = sum(!is.na(mean_left_gaze_time_s) & !is.na(AQ))
+  )
+print(correlation_results2)
+
+correlation_results3 <- laq %>%
+  group_by(condition) %>%
+  summarise(
+    correlation = cor(mean_left_gaze_time_s, AQ, use = "complete.obs"),
+    p_value = cor.test(mean_left_gaze_time_s, AQ)$p.value,
+    n = sum(!is.na(mean_left_gaze_time_s) & !is.na(AQ))
+  )
+print(correlation_results3)
+```
+
+```{r}
+haq <- subset(aq_data, percent_group=="high")
+maq <- subset(aq_data, percent_group=="middle")
+laq <- subset(aq_data, percent_group=="low")
+
+# 方法1: 使用dplyr分组计算相关系数
+correlation_results <- haq %>%
+  group_by(condition) %>%
+  summarise(
+    correlation = cor(mean_left_gaze_time_s, social, use = "complete.obs"),
+    p_value = cor.test(mean_left_gaze_time_s, social)$p.value,
+    n = sum(!is.na(mean_left_gaze_time_s) & !is.na(social))
+  )
+print(correlation_results)
+
+correlation_results2 <- maq %>%
+  group_by(condition) %>%
+  summarise(
+    correlation = cor(mean_left_gaze_time_s, social, use = "complete.obs"),
+    p_value = cor.test(mean_left_gaze_time_s, social)$p.value,
+    n = sum(!is.na(mean_left_gaze_time_s) & !is.na(social))
+  )
+print(correlation_results2)
+
+correlation_results3 <- laq %>%
+  group_by(condition) %>%
+  summarise(
+    correlation = cor(mean_left_gaze_time_s, social, use = "complete.obs"),
+    p_value = cor.test(mean_left_gaze_time_s, social)$p.value,
+    n = sum(!is.na(mean_left_gaze_time_s) & !is.na(social))
+  )
+print(correlation_results3)
+```
+
+
+```{r}
+# 创建一个函数来为单个condition和group绘图
+plot_single <- function(data, group_name, cond, color) {
+  # 计算相关系数和p值
+  cor_test <- cor.test(data$mean_left_gaze_time_s, data$AQ)
+  cor_value <- cor_test$estimate
+  p_value <- cor_test$p.value
+  
+  # 创建标签
+  label_text <- sprintf("r = %.3f\np = %.3f", cor_value, p_value)
+  
+  # 确定标签位置
+  x_pos <- min(data$AQ, na.rm = TRUE) + 0.05 * (max(data$AQ, na.rm = TRUE) - min(data$AQ, na.rm = TRUE))
+  y_pos <- max(data$mean_left_gaze_time_s, na.rm = TRUE) * 0.95
+  
+  # 绘图
+  p <- ggplot(data, aes(x = AQ, y = mean_left_gaze_time_s)) +
+    geom_point(alpha = 0.6, size = 3, color = color) +
+    geom_smooth(method = "lm", se = TRUE, alpha = 0.2, color = color, fill = color) +
+    annotate("text", x = x_pos, y = y_pos, label = label_text, 
+             hjust = 0, vjust = 1, size = 4, color = "black") +
+    theme_bw() +
+    labs(title = paste(group_name, "-", toupper(cond)),
+         x = "AQ Score",
+         y = "Mean Left Gaze Time (s)") +
+    theme(plot.title = element_text(hjust = 0.5, face = "bold", size = 12),
+          axis.title = element_text(size = 11),
+          axis.text = element_text(size = 10))
+  
+  return(p)
+}
+
+# 定义颜色
+colors <- c("f" = "#E41A1C", "u1" = "#377EB8", "u2" = "#4DAF4A")
+
+# High Morph Group
+haq_f <- haq %>% filter(condition == "f")
+haq_u1 <- haq %>% filter(condition == "u1")
+haq_u2 <- haq %>% filter(condition == "u2")
+
+p1 <- plot_single(haq_f, "High Morph Group", "f", colors["f"])
+p2 <- plot_single(haq_u1, "High Morph Group", "u1", colors["u1"])
+p3 <- plot_single(haq_u2, "High Morph Group", "u2", colors["u2"])
+
+print(p1)
+print(p2)
+print(p3)
+
+# Middle Morph Group
+maq_f <- maq %>% filter(condition == "f")
+maq_u1 <- maq %>% filter(condition == "u1")
+maq_u2 <- maq %>% filter(condition == "u2")
+
+p4 <- plot_single(maq_f, "Middle Morph Group", "f", colors["f"])
+p5 <- plot_single(maq_u1, "Middle Morph Group", "u1", colors["u1"])
+p6 <- plot_single(maq_u2, "Middle Morph Group", "u2", colors["u2"])
+
+print(p4)
+print(p5)
+print(p6)
+
+# Low Morph Group
+laq_f <- laq %>% filter(condition == "f")
+laq_u1 <- laq %>% filter(condition == "u1")
+laq_u2 <- laq %>% filter(condition == "u2")
+
+p7 <- plot_single(laq_f, "Low Morph Group", "f", colors["f"])
+p8 <- plot_single(laq_u1, "Low Morph Group", "u1", colors["u1"])
+p9 <- plot_single(laq_u2, "Low Morph Group", "u2", colors["u2"])
+
+print(p7)
+print(p8)
+print(p9)
+```
+
+```{r}
+# 创建符合APA格式的单个散点图函数(简化版,支持性别区分)
+plot_single_apa <- function(data, cond, color, show_x_axis = TRUE, 
+                            show_y_axis = TRUE, show_y_text = TRUE) {
+  # 计算相关系数和p值
+  cor_test <- cor.test(data$mean_left_gaze_time_s, data$AQ)
+  cor_value <- cor_test$estimate
+  p_value <- cor_test$p.value
+  mean_value <- mean(data$mean_left_gaze_time_s, na.rm = TRUE)
+  
+  # 格式化p值(APA格式)
+  if (p_value < 0.001) {
+    p_text <- "p~`<`~.001"
+  } else if (p_value < 0.01) {
+    p_text <- sprintf("p~`=`~%.3f", p_value)
+  } else {
+    p_text <- sprintf("p~`=`~%.2f", p_value)
+  }
+  
+  # 创建标签(使用expression格式)
+  label_text <- sprintf("italic(r)~`=`~%.2f*','~%s", cor_value, p_text)
+  
+  # 确定标签位置(右上角)
+  x_pos <- max(data$AQ, na.rm = TRUE) * 0.95
+  y_pos <- max(data$mean_left_gaze_time_s, na.rm = TRUE) * 0.95
+  
+  # 创建标签数据框
+  label_df <- data.frame(
+    x = x_pos,
+    y = y_pos,
+    label = label_text
+  )
+  
+  # 绘图(APA格式) - 按性别使用不同形状
+  p <- ggplot(data, aes(x = AQ, y = mean_left_gaze_time_s)) +
+    # 使用性别区分形状:圆形(f=16)和三角形(m=17)
+    geom_point(aes(shape = gender), alpha = 0.6, size = 2.5, color = color) +
+    scale_shape_manual(values = c("f" = 16, "m" = 17),
+                       labels = c("f" = "Female", "m" = "Male"),
+                       name = NULL) +
+    
+    # 回归线不区分性别,使用所有数据
+    geom_smooth(method = "lm", se = TRUE, alpha = 0.15, 
+                color = color, fill = color, linewidth = 1) +
+    geom_hline(yintercept = mean_value, linetype = "dashed", 
+                color = "gray50", linewidth = 0.5, alpha = 0.7)+    
+    # 使用geom_text - 统计信息
+    geom_text(data = label_df, aes(x = x, y = y, label = label),
+              hjust = 1, vjust = 1, size = 3.5, parse = TRUE,
+              inherit.aes = FALSE) +
+    
+    
+    # APA主题设置
+    theme_classic(base_size = 14, base_family = "sans") +
+    
+    labs(x = NULL, y = NULL) +
+    
+    theme(
+      # 坐标轴文字
+      axis.text.x = if(show_x_axis) element_text(size = 12, color = "black") else element_blank(),
+      axis.text.y = if(show_y_text) element_text(size = 12, color = "black") else element_blank(),
+      
+      # 坐标轴线条和刻度
+      axis.line.x = if(show_x_axis) element_line(color = "black", linewidth = 0.5) else element_blank(),
+      axis.line.y = if(show_y_axis) element_line(color = "black", linewidth = 0.5) else element_blank(),
+      axis.ticks.x = if(show_x_axis) element_line(color = "black", linewidth = 0.5) else element_blank(),
+      axis.ticks.y = if(show_y_text) element_line(color = "black", linewidth = 0.5) else element_blank(),
+      
+      # 移除网格线(APA要求)
+      panel.grid = element_blank(),
+      
+      # 隐藏图例(因为会在外部统一添加)
+      legend.position = "none",
+      
+      # 边距
+      plot.margin = margin(5, 5, 5, 5)
+    ) +
+    
+    # 设置坐标轴范围
+    scale_y_continuous(expand = expansion(mult = c(0.05, 0.1)))
+  
+  return(p)
+}
+
+# 定义APA推荐的颜色
+colors <- c("f" = "#D55E00", "u1" = "#0072B2", "u2" = "#009E73")
+
+# 准备所有数据
+# High Morph Group
+haq_f <- haq %>% filter(condition == "f")
+haq_u1 <- haq %>% filter(condition == "u1")
+haq_u2 <- haq %>% filter(condition == "u2")
+
+# Middle Morph Group
+maq_f <- maq %>% filter(condition == "f")
+maq_u1 <- maq %>% filter(condition == "u1")
+maq_u2 <- maq %>% filter(condition == "u2")
+
+# Low Morph Group
+laq_f <- laq %>% filter(condition == "f")
+laq_u1 <- laq %>% filter(condition == "u1")
+laq_u2 <- laq %>% filter(condition == "u2")
+
+# 创建所有图表
+# 第一行: Fearful (f)
+p1 <- plot_single_apa(haq_f, "f", colors["f"], 
+                      show_x_axis = FALSE, show_y_axis = TRUE, show_y_text = TRUE)
+p2 <- plot_single_apa(maq_f, "f", colors["f"], 
+                      show_x_axis = FALSE, show_y_axis = TRUE, show_y_text = FALSE)
+p3 <- plot_single_apa(laq_f, "f", colors["f"], 
+                      show_x_axis = FALSE, show_y_axis = TRUE, show_y_text = FALSE)
+
+# 第二行: Uncertain 1 (u1)
+p4 <- plot_single_apa(haq_u1, "u1", colors["u1"], 
+                      show_x_axis = FALSE, show_y_axis = TRUE, show_y_text = TRUE)
+p5 <- plot_single_apa(maq_u1, "u1", colors["u1"], 
+                      show_x_axis = FALSE, show_y_axis = TRUE, show_y_text = FALSE)
+p6 <- plot_single_apa(laq_u1, "u1", colors["u1"], 
+                      show_x_axis = FALSE, show_y_axis = TRUE, show_y_text = FALSE)
+
+# 第三行: Uncertain 2 (u2)
+p7 <- plot_single_apa(haq_u2, "u2", colors["u2"], 
+                      show_x_axis = TRUE, show_y_axis = TRUE, show_y_text = TRUE)
+p8 <- plot_single_apa(maq_u2, "u2", colors["u2"], 
+                      show_x_axis = TRUE, show_y_axis = TRUE, show_y_text = FALSE)
+p9 <- plot_single_apa(laq_u2, "u2", colors["u2"], 
+                      show_x_axis = TRUE, show_y_axis = TRUE, show_y_text = FALSE)
+
+# 使用patchwork包组合图表
+library(patchwork)
+
+# 组合图表
+combined_plot <- (p1 | p2 | p3) /
+                 (p4 | p5 | p6) /
+                 (p7 | p8 | p9)
+
+# 使用grid包添加自定义标签
+library(grid)
+
+# 创建一个带图例的图表(用于提取图例)
+legend_plot <- ggplot(haq_f, aes(x = AQ, y = mean_left_gaze_time_s)) +
+  geom_point(aes(shape = gender), alpha = 0.6, size = 2.5, color = "black") +
+  scale_shape_manual(values = c("f" = 16, "m" = 17),
+                     labels = c("f" = "Female", "m" = "Male"),
+                     name = NULL) +
+  theme_classic(base_size = 14) +
+  theme(legend.position = "bottom",
+        legend.text = element_text(size = 12))
+
+# 提取图例
+library(gridExtra)
+get_legend <- function(myggplot){
+  tmp <- ggplot_gtable(ggplot_build(myggplot))
+  leg <- which(sapply(tmp$grobs, function(x) x$name) == "guide-box")
+  legend <- tmp$grobs[[leg]]
+  return(legend)
+}
+
+legend <- get_legend(legend_plot)
+
+# 创建最终图表
+grid.newpage()
+
+# 绘制主图
+pushViewport(viewport(x = 0.5, y = 0.52, width = 0.88, height = 0.88))
+print(combined_plot, newpage = FALSE)
+popViewport()
+
+# 添加列标题 (顶部)
+grid.text("High", x = 0.24, y = 0.96, gp = gpar(fontsize = 16, fontface = "bold"))
+grid.text("Middle", x = 0.535, y = 0.96, gp = gpar(fontsize = 16, fontface = "bold"))
+grid.text("Low", x = 0.83, y = 0.96, gp = gpar(fontsize = 16, fontface = "bold"))
+
+# 添加行标题 (左侧)
+grid.text("F", x = 0.065, y = 0.77, gp = gpar(fontsize = 14, fontface = "bold"))
+grid.text("U1", x = 0.065, y = 0.52, gp = gpar(fontsize = 14, fontface = "bold"))
+grid.text("U2", x = 0.065, y = 0.27, gp = gpar(fontsize = 14, fontface = "bold"))
+
+# 添加Y轴总标题 (左侧,旋转90度)
+grid.text("Mean Left Gaze Time (s)", x = 0.02, y = 0.52, rot = 90, 
+          gp = gpar(fontsize = 15, fontface = "plain"))
+
+# 添加X轴总标题 (底部)
+grid.text("AQ Score", x = 0.54, y = 0.09, 
+          gp = gpar(fontsize = 15, fontface = "plain"))
+
+# 添加图例 (底部中央)
+pushViewport(viewport(x = 0.54, y = 0.02, width = 0.3, height = 0.05))
+grid.draw(legend)
+popViewport()
+```
+```{r}
+# 创建符合APA格式的单个散点图函数(简化版,支持性别区分)
+plot_single_apa <- function(data, cond, color, show_x_axis = TRUE, 
+                            show_y_axis = TRUE, show_y_text = TRUE) {
+  # 计算相关系数和p值
+  cor_test <- cor.test(data$mean_left_gaze_time_s, data$AQ)
+  cor_value <- cor_test$estimate
+  p_value <- cor_test$p.value
+  mean_value <- mean(data$mean_left_gaze_time_s, na.rm = TRUE)
+  
+  # 格式化p值(APA格式)
+  if (p_value < 0.001) {
+    p_text <- "p~`<`~.001"
+  } else if (p_value < 0.01) {
+    p_text <- sprintf("p~`=`~%.3f", p_value)
+  } else {
+    p_text <- sprintf("p~`=`~%.2f", p_value)
+  }
+  
+  # 创建标签(使用expression格式)
+  label_text <- sprintf("italic(r)~`=`~%.2f*','~%s", cor_value, p_text)
+  
+  # 确定标签位置(右上角)
+  x_pos <- max(data$AQ, na.rm = TRUE) * 0.95
+  y_pos <- max(data$mean_left_gaze_time_s, na.rm = TRUE) * 0.95
+  
+  # 创建标签数据框
+  label_df <- data.frame(
+    x = x_pos,
+    y = y_pos,
+    label = label_text
+  )
+  
+  # 绘图(APA格式) - 按性别使用不同形状
+  p <- ggplot(data, aes(x = AQ, y = mean_left_gaze_time_s)) +
+    # 使用性别区分形状:圆形(f=16)和三角形(m=17)
+    geom_point(aes(shape = gender), alpha = 0.6, size = 2.5, color = color) +
+    scale_shape_manual(values = c("f" = 16, "m" = 17),
+                       labels = c("f" = "Female", "m" = "Male"),
+                       name = NULL) +
+    
+    # 回归线不区分性别,使用所有数据
+    geom_smooth(method = "lm", se = TRUE, alpha = 0.15, 
+                color = color, fill = color, linewidth = 1) +
+    geom_hline(yintercept = mean_value, linetype = "dashed", 
+                color = "gray50", linewidth = 0.5, alpha = 0.7)+    
+    # 使用geom_text - 统计信息
+    geom_text(data = label_df, aes(x = x, y = y, label = label),
+              hjust = 1, vjust = 1, size = 4, parse = TRUE,
+              inherit.aes = FALSE) +
+    
+    
+    # APA主题设置
+    theme_classic(base_size = 14, base_family = "sans") +
+    
+    labs(x = NULL, y = NULL) +
+    
+    theme(
+      # 坐标轴文字
+      axis.text.x = if(show_x_axis) element_text(size = 12, color = "black") else element_blank(),
+      axis.text.y = if(show_y_text) element_text(size = 12, color = "black") else element_blank(),
+      
+      # 坐标轴线条和刻度
+      axis.line.x = if(show_x_axis) element_line(color = "black", linewidth = 0.5) else element_blank(),
+      axis.line.y = if(show_y_axis) element_line(color = "black", linewidth = 0.5) else element_blank(),
+      axis.ticks.x = if(show_x_axis) element_line(color = "black", linewidth = 0.5) else element_blank(),
+      axis.ticks.y = if(show_y_text) element_line(color = "black", linewidth = 0.5) else element_blank(),
+      
+      # 移除网格线(APA要求)
+      panel.grid = element_blank(),
+      
+      # 隐藏图例(因为会在外部统一添加)
+      legend.position = "none",
+      
+      # 边距
+      plot.margin = margin(5, 5, 5, 5)
+    ) +
+    
+    # 设置坐标轴范围
+    scale_y_continuous(expand = expansion(mult = c(0.05, 0.1)))
+  
+  return(p)
+}
+
+# 定义APA推荐的颜色
+colors <- c("f" = "#D55E00", "u1" = "#0072B2", "u2" = "#009E73")
+
+# 加载必需的包
+library(patchwork)
+library(grid)
+library(gridExtra)
+
+# 图例提取函数
+get_legend <- function(myggplot){
+  tmp <- ggplot_gtable(ggplot_build(myggplot))
+  leg <- which(sapply(tmp$grobs, function(x) x$name) == "guide-box")
+  legend <- tmp$grobs[[leg]]
+  return(legend)
+}
+
+# ========== 第一张图: Order = FU ==========
+# 准备FU组数据
+haq_fu <- haq %>% filter(order == "fu")
+maq_fu <- maq %>% filter(order == "fu")
+laq_fu <- laq %>% filter(order == "fu")
+
+# 第一行: Fearful (f)
+p1_fu <- plot_single_apa(haq_fu %>% filter(condition == "f"), "f", colors["f"], 
+                         show_x_axis = FALSE, show_y_axis = TRUE, show_y_text = TRUE)
+p2_fu <- plot_single_apa(maq_fu %>% filter(condition == "f"), "f", colors["f"], 
+                         show_x_axis = FALSE, show_y_axis = TRUE, show_y_text = FALSE)
+p3_fu <- plot_single_apa(laq_fu %>% filter(condition == "f"), "f", colors["f"], 
+                         show_x_axis = FALSE, show_y_axis = TRUE, show_y_text = FALSE)
+
+# 第二行: Uncertain 1 (u1)
+p4_fu <- plot_single_apa(haq_fu %>% filter(condition == "u1"), "u1", colors["u1"], 
+                         show_x_axis = FALSE, show_y_axis = TRUE, show_y_text = TRUE)
+p5_fu <- plot_single_apa(maq_fu %>% filter(condition == "u1"), "u1", colors["u1"], 
+                         show_x_axis = FALSE, show_y_axis = TRUE, show_y_text = FALSE)
+p6_fu <- plot_single_apa(laq_fu %>% filter(condition == "u1"), "u1", colors["u1"], 
+                         show_x_axis = FALSE, show_y_axis = TRUE, show_y_text = FALSE)
+
+# 第三行: Uncertain 2 (u2)
+p7_fu <- plot_single_apa(haq_fu %>% filter(condition == "u2"), "u2", colors["u2"], 
+                         show_x_axis = TRUE, show_y_axis = TRUE, show_y_text = TRUE)
+p8_fu <- plot_single_apa(maq_fu %>% filter(condition == "u2"), "u2", colors["u2"], 
+                         show_x_axis = TRUE, show_y_axis = TRUE, show_y_text = FALSE)
+p9_fu <- plot_single_apa(laq_fu %>% filter(condition == "u2"), "u2", colors["u2"], 
+                         show_x_axis = TRUE, show_y_axis = TRUE, show_y_text = FALSE)
+
+# 组合图表
+combined_plot_fu <- (p1_fu | p2_fu | p3_fu) /
+                    (p4_fu | p5_fu | p6_fu) /
+                    (p7_fu | p8_fu | p9_fu)
+
+# 创建图例
+legend_plot <- ggplot(haq_fu %>% filter(condition == "f"), 
+                      aes(x = AQ, y = mean_left_gaze_time_s)) +
+  geom_point(aes(shape = gender), alpha = 0.6, size = 2.5, color = "black") +
+  #scale_shape_manual(values = c("f" = 16, "m" = 17),
+                     #labels = c("f" = "Female", "m" = "Male"),
+                     #name = NULL) +
+  theme_classic(base_size = 14) +
+  theme(legend.position = "bottom",
+        legend.text = element_text(size = 12))
+
+legend <- get_legend(legend_plot)
+
+# 绘制FU图
+grid.newpage()
+pushViewport(viewport(x = 0.5, y = 0.52, width = 0.88, height = 0.88))
+print(combined_plot_fu, newpage = FALSE)
+popViewport()
+
+# 添加标题和标签
+#grid.text("Order: FU", x = 0.54, y = 0.99, gp = gpar(fontsize = 18, fontface = "bold"))
+grid.text("High", x = 0.24, y = 0.96, gp = gpar(fontsize = 16, fontface = "bold"))
+grid.text("Middle", x = 0.535, y = 0.96, gp = gpar(fontsize = 16, fontface = "bold"))
+grid.text("Low", x = 0.83, y = 0.96, gp = gpar(fontsize = 16, fontface = "bold"))
+
+grid.text("F", x = 0.065, y = 0.77, gp = gpar(fontsize = 14, fontface = "bold"))
+grid.text("U1", x = 0.065, y = 0.52, gp = gpar(fontsize = 14, fontface = "bold"))
+grid.text("U2", x = 0.065, y = 0.27, gp = gpar(fontsize = 14, fontface = "bold"))
+
+grid.text("Mean Left Gaze Time (s)", x = 0.02, y = 0.52, rot = 90, 
+          gp = gpar(fontsize = 15, fontface = "plain"))
+grid.text("AQ Score", x = 0.54, y = 0.09, 
+          gp = gpar(fontsize = 15, fontface = "plain"))
+
+pushViewport(viewport(x = 0.54, y = 0.02, width = 0.3, height = 0.05))
+grid.draw(legend)
+popViewport()
+
+
+# ========== 第二张图: Order = UF (调整condition顺序为u1, f, u2) ==========
+# 准备UF组数据
+haq_uf <- haq %>% filter(order == "uf")
+maq_uf <- maq %>% filter(order == "uf")
+laq_uf <- laq %>% filter(order == "uf")
+
+# 第一行: Uncertain 1 (u1)
+p1_uf <- plot_single_apa(haq_uf %>% filter(condition == "u1"), "u1", colors["u1"], 
+                         show_x_axis = FALSE, show_y_axis = TRUE, show_y_text = TRUE)
+p2_uf <- plot_single_apa(maq_uf %>% filter(condition == "u1"), "u1", colors["u1"], 
+                         show_x_axis = FALSE, show_y_axis = TRUE, show_y_text = FALSE)
+p3_uf <- plot_single_apa(laq_uf %>% filter(condition == "u1"), "u1", colors["u1"], 
+                         show_x_axis = FALSE, show_y_axis = TRUE, show_y_text = FALSE)
+
+# 第二行: Fearful (f)
+p4_uf <- plot_single_apa(haq_uf %>% filter(condition == "f"), "f", colors["f"], 
+                         show_x_axis = FALSE, show_y_axis = TRUE, show_y_text = TRUE)
+p5_uf <- plot_single_apa(maq_uf %>% filter(condition == "f"), "f", colors["f"], 
+                         show_x_axis = FALSE, show_y_axis = TRUE, show_y_text = FALSE)
+p6_uf <- plot_single_apa(laq_uf %>% filter(condition == "f"), "f", colors["f"], 
+                         show_x_axis = FALSE, show_y_axis = TRUE, show_y_text = FALSE)
+
+# 第三行: Uncertain 2 (u2)
+p7_uf <- plot_single_apa(haq_uf %>% filter(condition == "u2"), "u2", colors["u2"], 
+                         show_x_axis = TRUE, show_y_axis = TRUE, show_y_text = TRUE)
+p8_uf <- plot_single_apa(maq_uf %>% filter(condition == "u2"), "u2", colors["u2"], 
+                         show_x_axis = TRUE, show_y_axis = TRUE, show_y_text = FALSE)
+p9_uf <- plot_single_apa(laq_uf %>% filter(condition == "u2"), "u2", colors["u2"], 
+                         show_x_axis = TRUE, show_y_axis = TRUE, show_y_text = FALSE)
+
+# 组合图表
+combined_plot_uf <- (p1_uf | p2_uf | p3_uf) /
+                    (p4_uf | p5_uf | p6_uf) /
+                    (p7_uf | p8_uf | p9_uf)
+
+# 绘制UF图
+grid.newpage()
+pushViewport(viewport(x = 0.5, y = 0.52, width = 0.88, height = 0.88))
+print(combined_plot_uf, newpage = FALSE)
+popViewport()
+
+# 添加标题和标签 (注意行标签顺序变化)
+#grid.text("Order: UF", x = 0.54, y = 0.99, gp = gpar(fontsize = 18, fontface = "bold"))
+grid.text("High", x = 0.24, y = 0.96, gp = gpar(fontsize = 16, fontface = "bold"))
+grid.text("Middle", x = 0.535, y = 0.96, gp = gpar(fontsize = 16, fontface = "bold"))
+grid.text("Low", x = 0.83, y = 0.96, gp = gpar(fontsize = 16, fontface = "bold"))
+
+grid.text("U1", x = 0.065, y = 0.77, gp = gpar(fontsize = 14, fontface = "bold"))
+grid.text("F", x = 0.065, y = 0.52, gp = gpar(fontsize = 14, fontface = "bold"))
+grid.text("U2", x = 0.065, y = 0.27, gp = gpar(fontsize = 14, fontface = "bold"))
+
+grid.text("Mean Left Gaze Time (s)", x = 0.02, y = 0.52, rot = 90, 
+          gp = gpar(fontsize = 15, fontface = "plain"))
+grid.text("AQ Score", x = 0.54, y = 0.09, 
+          gp = gpar(fontsize = 15, fontface = "plain"))
+
+pushViewport(viewport(x = 0.54, y = 0.02, width = 0.3, height = 0.05))
+grid.draw(legend)
+popViewport()
+```
+```{r}
+# 创建符合APA格式的单个散点图函数(简化版,支持性别区分)
+plot_single_apa <- function(data, cond, color, show_x_axis = TRUE, 
+                            show_y_axis = TRUE, show_y_text = TRUE) {
+  # 计算相关系数和p值
+  cor_test <- cor.test(data$mean_left_gaze_time_s, data$AQ)
+  cor_value <- cor_test$estimate
+  p_value <- cor_test$p.value
+  mean_value <- mean(data$mean_left_gaze_time_s, na.rm = TRUE)
+  
+  # 格式化p值(APA格式)
+  if (p_value < 0.001) {
+    p_text <- "p~`<`~.001"
+  } else if (p_value < 0.01) {
+    p_text <- sprintf("p~`=`~%.3f", p_value)
+  } else {
+    p_text <- sprintf("p~`=`~%.2f", p_value)
+  }
+  
+  # 创建标签(使用expression格式) - 第一行:相关系数和p值
+  label_text_line1 <- sprintf("italic(r)~`=`~%.2f*','~%s", cor_value, p_text)
+  # 第二行:平均值
+  label_text_line2 <- sprintf("italic(M)~`=`~%.2f", mean_value)
+  
+  # 确定标签位置(右上角)
+  x_pos <- max(data$AQ, na.rm = TRUE) * 0.95
+  y_pos_line1 <- max(data$mean_left_gaze_time_s, na.rm = TRUE) * 0.95
+  y_pos_line2 <- max(data$mean_left_gaze_time_s, na.rm = TRUE) * 0.80  # 第二行稍微低一点
+  
+  # 创建标签数据框
+  label_df <- data.frame(
+    x = c(x_pos, x_pos),
+    y = c(y_pos_line1, y_pos_line2),
+    label = c(label_text_line1, label_text_line2)
+  )
+  
+  # 绘图(APA格式) - 按性别使用不同形状
+  p <- ggplot(data, aes(x = AQ, y = mean_left_gaze_time_s)) +
+    # 使用性别区分形状:圆形(f=16)和三角形(m=17)
+    geom_point(aes(shape = gender), alpha = 0.6, size = 2.5, color = color) +
+    scale_shape_manual(values = c("f" = 16, "m" = 17),
+                       name = NULL) +
+    
+    # 回归线不区分性别,使用所有数据
+    geom_smooth(method = "lm", se = TRUE, alpha = 0.15, 
+                color = color, fill = color, linewidth = 1) +
+    geom_hline(yintercept = mean_value, linetype = "dashed", 
+                color = "gray50", linewidth = 0.5, alpha = 0.7) +    
+    # 使用geom_text - 统计信息(两行)
+    geom_text(data = label_df, aes(x = x, y = y, label = label),
+              hjust = 1, vjust = 1, size = 4.5, parse = TRUE,
+              inherit.aes = FALSE) +
+    
+    
+    # APA主题设置
+    theme_classic(base_size = 14, base_family = "sans") +
+    
+    labs(x = NULL, y = NULL) +
+    
+    theme(
+      # 坐标轴文字
+      axis.text.x = if(show_x_axis) element_text(size = 12, color = "black") else element_blank(),
+      axis.text.y = if(show_y_text) element_text(size = 12, color = "black") else element_blank(),
+      
+      # 坐标轴线条和刻度
+      axis.line.x = if(show_x_axis) element_line(color = "black", linewidth = 0.5) else element_blank(),
+      axis.line.y = if(show_y_axis) element_line(color = "black", linewidth = 0.5) else element_blank(),
+      axis.ticks.x = if(show_x_axis) element_line(color = "black", linewidth = 0.5) else element_blank(),
+      axis.ticks.y = if(show_y_text) element_line(color = "black", linewidth = 0.5) else element_blank(),
+      
+      # 移除网格线(APA要求)
+      panel.grid = element_blank(),
+      
+      # 隐藏图例(因为会在外部统一添加)
+      legend.position = "none",
+      
+      # 边距
+      plot.margin = margin(5, 5, 5, 5)
+    ) +
+    
+    # 设置坐标轴范围
+    scale_y_continuous(expand = expansion(mult = c(0.05, 0.1)))
+  
+  return(p)
+}
+
+# 定义APA推荐的颜色
+colors <- c("f" = "#D55E00", "u1" = "#0072B2", "u2" = "#009E73")
+
+# 加载必需的包
+library(patchwork)
+library(grid)
+library(gridExtra)
+
+# 图例提取函数
+get_legend <- function(myggplot){
+  tmp <- ggplot_gtable(ggplot_build(myggplot))
+  leg <- which(sapply(tmp$grobs, function(x) x$name) == "guide-box")
+  legend <- tmp$grobs[[leg]]
+  return(legend)
+}
+
+# ========== 第一张图: Order = FU ==========
+# 准备FU组数据
+haq_fu <- haq %>% filter(order == "fu")
+maq_fu <- maq %>% filter(order == "fu")
+laq_fu <- laq %>% filter(order == "fu")
+
+# 第一行: Fearful (f)
+p1_fu <- plot_single_apa(haq_fu %>% filter(condition == "f"), "f", colors["f"], 
+                         show_x_axis = FALSE, show_y_axis = TRUE, show_y_text = TRUE)
+p2_fu <- plot_single_apa(maq_fu %>% filter(condition == "f"), "f", colors["f"], 
+                         show_x_axis = FALSE, show_y_axis = TRUE, show_y_text = FALSE)
+p3_fu <- plot_single_apa(laq_fu %>% filter(condition == "f"), "f", colors["f"], 
+                         show_x_axis = FALSE, show_y_axis = TRUE, show_y_text = FALSE)
+
+# 第二行: Uncertain 1 (u1)
+p4_fu <- plot_single_apa(haq_fu %>% filter(condition == "u1"), "u1", colors["u1"], 
+                         show_x_axis = FALSE, show_y_axis = TRUE, show_y_text = TRUE)
+p5_fu <- plot_single_apa(maq_fu %>% filter(condition == "u1"), "u1", colors["u1"], 
+                         show_x_axis = FALSE, show_y_axis = TRUE, show_y_text = FALSE)
+p6_fu <- plot_single_apa(laq_fu %>% filter(condition == "u1"), "u1", colors["u1"], 
+                         show_x_axis = FALSE, show_y_axis = TRUE, show_y_text = FALSE)
+
+# 第三行: Uncertain 2 (u2)
+p7_fu <- plot_single_apa(haq_fu %>% filter(condition == "u2"), "u2", colors["u2"], 
+                         show_x_axis = TRUE, show_y_axis = TRUE, show_y_text = TRUE)
+p8_fu <- plot_single_apa(maq_fu %>% filter(condition == "u2"), "u2", colors["u2"], 
+                         show_x_axis = TRUE, show_y_axis = TRUE, show_y_text = FALSE)
+p9_fu <- plot_single_apa(laq_fu %>% filter(condition == "u2"), "u2", colors["u2"], 
+                         show_x_axis = TRUE, show_y_axis = TRUE, show_y_text = FALSE)
+
+# 组合图表
+combined_plot_fu <- (p1_fu | p2_fu | p3_fu) /
+                    (p4_fu | p5_fu | p6_fu) /
+                    (p7_fu | p8_fu | p9_fu)
+
+# 创建图例
+legend_plot <- ggplot(haq_fu %>% filter(condition == "f"), 
+                      aes(x = AQ, y = mean_left_gaze_time_s)) +
+  geom_point(aes(shape = gender), alpha = 0.6, size = 2.5, color = "black") +
+  scale_shape_manual(values = c("f" = 16, "m" = 17),
+                     labels = c("f" = "Female", "m" = "Male"),
+                     name = NULL) +
+  theme_classic(base_size = 14) +
+  theme(legend.position = "bottom",
+        legend.text = element_text(size = 12))
+
+legend <- get_legend(legend_plot)
+
+# 绘制FU图
+grid.newpage()
+pushViewport(viewport(x = 0.5, y = 0.52, width = 0.88, height = 0.88))
+print(combined_plot_fu, newpage = FALSE)
+popViewport()
+
+# 添加标题和标签
+grid.text("High", x = 0.24, y = 0.96, gp = gpar(fontsize = 16, fontface = "bold"))
+grid.text("Middle", x = 0.535, y = 0.96, gp = gpar(fontsize = 16, fontface = "bold"))
+grid.text("Low", x = 0.83, y = 0.96, gp = gpar(fontsize = 16, fontface = "bold"))
+
+grid.text("F", x = 0.065, y = 0.77, gp = gpar(fontsize = 14, fontface = "bold"))
+grid.text("U1", x = 0.065, y = 0.52, gp = gpar(fontsize = 14, fontface = "bold"))
+grid.text("U2", x = 0.065, y = 0.27, gp = gpar(fontsize = 14, fontface = "bold"))
+
+grid.text("Left Gaze Time (s)", x = 0.02, y = 0.52, rot = 90, 
+          gp = gpar(fontsize = 15, fontface = "plain"))
+grid.text("AQ Score", x = 0.54, y = 0.09, 
+          gp = gpar(fontsize = 15, fontface = "plain"))
+
+pushViewport(viewport(x = 0.54, y = 0.02, width = 0.3, height = 0.05))
+grid.draw(legend)
+popViewport()
+
+
+# ========== 第二张图: Order = UF (调整condition顺序为u1, f, u2) ==========
+# 准备UF组数据
+haq_uf <- haq %>% filter(order == "uf")
+maq_uf <- maq %>% filter(order == "uf")
+laq_uf <- laq %>% filter(order == "uf")
+
+# 第一行: Uncertain 1 (u1)
+p1_uf <- plot_single_apa(haq_uf %>% filter(condition == "u1"), "u1", colors["u1"], 
+                         show_x_axis = FALSE, show_y_axis = TRUE, show_y_text = TRUE)
+p2_uf <- plot_single_apa(maq_uf %>% filter(condition == "u1"), "u1", colors["u1"], 
+                         show_x_axis = FALSE, show_y_axis = TRUE, show_y_text = FALSE)
+p3_uf <- plot_single_apa(laq_uf %>% filter(condition == "u1"), "u1", colors["u1"], 
+                         show_x_axis = FALSE, show_y_axis = TRUE, show_y_text = FALSE)
+
+# 第二行: Fearful (f)
+p4_uf <- plot_single_apa(haq_uf %>% filter(condition == "f"), "f", colors["f"], 
+                         show_x_axis = FALSE, show_y_axis = TRUE, show_y_text = TRUE)
+p5_uf <- plot_single_apa(maq_uf %>% filter(condition == "f"), "f", colors["f"], 
+                         show_x_axis = FALSE, show_y_axis = TRUE, show_y_text = FALSE)
+p6_uf <- plot_single_apa(laq_uf %>% filter(condition == "f"), "f", colors["f"], 
+                         show_x_axis = FALSE, show_y_axis = TRUE, show_y_text = FALSE)
+
+# 第三行: Uncertain 2 (u2)
+p7_uf <- plot_single_apa(haq_uf %>% filter(condition == "u2"), "u2", colors["u2"], 
+                         show_x_axis = TRUE, show_y_axis = TRUE, show_y_text = TRUE)
+p8_uf <- plot_single_apa(maq_uf %>% filter(condition == "u2"), "u2", colors["u2"], 
+                         show_x_axis = TRUE, show_y_axis = TRUE, show_y_text = FALSE)
+p9_uf <- plot_single_apa(laq_uf %>% filter(condition == "u2"), "u2", colors["u2"], 
+                         show_x_axis = TRUE, show_y_axis = TRUE, show_y_text = FALSE)
+
+# 组合图表
+combined_plot_uf <- (p1_uf | p2_uf | p3_uf) /
+                    (p4_uf | p5_uf | p6_uf) /
+                    (p7_uf | p8_uf | p9_uf)
+
+# 绘制UF图
+grid.newpage()
+pushViewport(viewport(x = 0.5, y = 0.52, width = 0.88, height = 0.88))
+print(combined_plot_uf, newpage = FALSE)
+popViewport()
+
+# 添加标题和标签 (注意行标签顺序变化)
+grid.text("High", x = 0.24, y = 0.96, gp = gpar(fontsize = 16, fontface = "bold"))
+grid.text("Middle", x = 0.535, y = 0.96, gp = gpar(fontsize = 16, fontface = "bold"))
+grid.text("Low", x = 0.83, y = 0.96, gp = gpar(fontsize = 16, fontface = "bold"))
+
+grid.text("U1", x = 0.065, y = 0.77, gp = gpar(fontsize = 14, fontface = "bold"))
+grid.text("F", x = 0.065, y = 0.52, gp = gpar(fontsize = 14, fontface = "bold"))
+grid.text("U2", x = 0.065, y = 0.27, gp = gpar(fontsize = 14, fontface = "bold"))
+
+grid.text("Left Gaze Time (s)", x = 0.02, y = 0.52, rot = 90, 
+          gp = gpar(fontsize = 15, fontface = "plain"))
+grid.text("AQ Score", x = 0.54, y = 0.09, 
+          gp = gpar(fontsize = 15, fontface = "plain"))
+
+pushViewport(viewport(x = 0.54, y = 0.02, width = 0.3, height = 0.05))
+grid.draw(legend)
+popViewport()
+```
+
+
+```{r}
+# 创建一个函数来为单个condition和group绘图
+plot_single <- function(data, group_name, cond, base_color) {
+  # 计算相关系数和p值
+  cor_test <- cor.test(data$mean_left_gaze_time_s, data$AQ)
+  cor_value <- cor_test$estimate
+  p_value <- cor_test$p.value
+  
+  # 创建标签
+  label_text <- sprintf("r = %.3f\np = %.3f", cor_value, p_value)
+  
+  # 确定标签位置
+  x_pos <- min(data$AQ, na.rm = TRUE) + 0.05 * (max(data$AQ, na.rm = TRUE) - min(data$AQ, na.rm = TRUE))
+  #y_pos <- max(data$mean_left_gaze_time_s, na.rm = TRUE) * 0.95
+  y_pos <- 0.8
+  
+  # 为fu和uf创建同色系的深浅色
+  library(colorspace)
+  color_fu <- darken(base_color, amount = 0.3)  # 深色给fu
+  color_uf <- lighten(base_color, amount = 0.2)  # 浅色给uf
+  
+  # 绘图 - 按order使用不同深浅的颜色
+  p <- ggplot(data, aes(x = AQ, y = mean_left_gaze_time_s, color = order)) +
+    geom_point(alpha = 0.7, size = 3) +
+    geom_smooth(method = "lm", se = TRUE, alpha = 0.2, 
+                color = base_color, fill = base_color) +
+    scale_color_manual(values = c("fu" = color_fu, "uf" = color_uf),
+                       labels = c("fu" = "FU", "uf" = "UF")) +
+    annotate("text", x = x_pos, y = y_pos, label = label_text, 
+             hjust = 0, vjust = 1, size = 4, color = "black") +
+    theme_bw() +
+    labs(title = paste(group_name, "-", toupper(cond)),
+         x = "AQ Score",
+         y = "Mean Left Gaze Time (s)",
+         color = "Order") +
+    theme(plot.title = element_text(hjust = 0.5, face = "bold", size = 12),
+          axis.title = element_text(size = 11),
+          axis.text = element_text(size = 10),
+          legend.position = "none")
+  
+  return(p)
+}
+
+# 定义颜色
+colors <- c("f" = "#E41A1C", "u1" = "#377EB8", "u2" = "#4DAF4A")
+
+haq <- subset(aq_data,percent_group=="high")
+maq <- subset(aq_data,percent_group=="middle")
+laq <- subset(aq_data,percent_group=="low")
+
+# High Morph Group
+haq_f <- haq %>% filter(condition == "f")
+haq_u1 <- haq %>% filter(condition == "u1")
+haq_u2 <- haq %>% filter(condition == "u2")
+
+p1 <- plot_single(haq_f, "High Morph Group", "f", colors["f"])
+p2 <- plot_single(haq_u1, "High Morph Group", "u1", colors["u1"])
+p3 <- plot_single(haq_u2, "High Morph Group", "u2", colors["u2"])
+
+print(p1)
+print(p2)
+print(p3)
+
+# Middle Morph Group
+maq_f <- maq %>% filter(condition == "f")
+maq_u1 <- maq %>% filter(condition == "u1")
+maq_u2 <- maq %>% filter(condition == "u2")
+
+p4 <- plot_single(maq_f, "Middle Morph Group", "f", colors["f"])
+p5 <- plot_single(maq_u1, "Middle Morph Group", "u1", colors["u1"])
+p6 <- plot_single(maq_u2, "Middle Morph Group", "u2", colors["u2"])
+
+print(p4)
+print(p5)
+print(p6)
+
+# Low Morph Group
+laq_f <- laq %>% filter(condition == "f")
+laq_u1 <- laq %>% filter(condition == "u1")
+laq_u2 <- laq %>% filter(condition == "u2")
+
+p7 <- plot_single(laq_f, "Low Morph Group", "f", colors["f"])
+p8 <- plot_single(laq_u1, "Low Morph Group", "u1", colors["u1"])
+p9 <- plot_single(laq_u2, "Low Morph Group", "u2", colors["u2"])
+
+print(p7)
+print(p8)
+print(p9)
+```
+```{r}
+# 创建一个函数来为单个condition和group绘图
+plot_single <- function(data, group_name, cond, base_color) {
+  # 计算相关系数和p值
+  cor_test <- cor.test(data$mean_left_gaze_time_s, data$AQ)
+  cor_value <- cor_test$estimate
+  p_value <- cor_test$p.value
+  
+  # 计算线性回归方程
+  lm_model <- lm(mean_left_gaze_time_s ~ AQ, data = data)
+  intercept <- coef(lm_model)[1]
+  slope <- coef(lm_model)[2]
+  
+  # 创建标签 - 包含回归方程、相关系数和p值
+  equation_text <- sprintf("y = %.4fx + %.4f", slope, intercept)
+  label_text <- sprintf("%s\nr = %.3f\np = %.3f", equation_text, cor_value, p_value)
+  
+  # 确定标签位置
+  x_pos <- 22  # 靠近右侧
+  y_pos <- 0.15  # 底部位置
+  
+  # 为fu和uf创建同色系的深浅色
+  library(colorspace)
+  color_fu <- darken(base_color, amount = 0.3)  # 深色给fu
+  color_uf <- lighten(base_color, amount = 0.2)  # 浅色给uf
+  
+  # 绘图 - 按order使用不同深浅的颜色
+  p <- ggplot(data, aes(x = AQ, y = mean_left_gaze_time_s, color = order)) +
+    geom_point(alpha = 0.7, size = 3) +
+    geom_smooth(method = "lm", se = TRUE, alpha = 0.2, 
+                color = base_color, fill = base_color) +
+    scale_color_manual(values = c("fu" = color_fu, "uf" = color_uf),
+                       labels = c("fu" = "FU", "uf" = "UF")) +
+    annotate("text", x = x_pos, y = y_pos, label = label_text, 
+             hjust = 0, vjust = 1, size = 4, color = "black") +
+    xlim(5, 35) +  # 统一x轴范围
+    ylim(0, 0.75) +   # 统一y轴范围
+    theme_bw() +
+    labs(title = paste(group_name, "-", toupper(cond)),
+         x = "AQ Score",
+         y = "Mean Left Gaze Time (s)",
+         color = "Order") +
+    theme(plot.title = element_text(hjust = 0.5, face = "bold", size = 12),
+          axis.title = element_text(size = 11),
+          axis.text = element_text(size = 10),
+          legend.position = "none")
+  
+  return(p)
+}
+
+# 定义颜色
+colors <- c("f" = "#E41A1C", "u1" = "#377EB8", "u2" = "#4DAF4A")
+haq <- subset(aq_data, percent_group == "high")
+maq <- subset(aq_data, percent_group == "middle")
+laq <- subset(aq_data, percent_group == "low")
+
+# High Morph Group
+haq_f <- haq %>% filter(condition == "f")
+haq_u1 <- haq %>% filter(condition == "u1")
+haq_u2 <- haq %>% filter(condition == "u2")
+p1 <- plot_single(haq_f, "High Morph Group", "f", colors["f"])
+p2 <- plot_single(haq_u1, "High Morph Group", "u1", colors["u1"])
+p3 <- plot_single(haq_u2, "High Morph Group", "u2", colors["u2"])
+print(p1)
+print(p2)
+print(p3)
+```
+
+
+```{r}
+# Middle Morph Group
+maq_f <- maq %>% filter(condition == "f")
+maq_u1 <- maq %>% filter(condition == "u1")
+maq_u2 <- maq %>% filter(condition == "u2")
+p4 <- plot_single(maq_f, "Middle Morph Group", "f", colors["f"])
+p5 <- plot_single(maq_u1, "Middle Morph Group", "u1", colors["u1"])
+p6 <- plot_single(maq_u2, "Middle Morph Group", "u2", colors["u2"])
+print(p4)
+print(p5)
+print(p6)
+
+# Low Morph Group
+laq_f <- laq %>% filter(condition == "f")
+laq_u1 <- laq %>% filter(condition == "u1")
+laq_u2 <- laq %>% filter(condition == "u2")
+p7 <- plot_single(laq_f, "Low Morph Group", "f", colors["f"])
+p8 <- plot_single(laq_u1, "Low Morph Group", "u1", colors["u1"])
+p9 <- plot_single(laq_u2, "Low Morph Group", "u2", colors["u2"])
+print(p7)
+print(p8)
+print(p9)
+```
+
+
+```{r}
+# 提取斜率
+model_f <- lm(mean_left_gaze_time_s ~ AQ, data = haq_f)
+model_u1 <- lm(mean_left_gaze_time_s ~ AQ, data = haq_u1)
+model_u2 <- lm(mean_left_gaze_time_s ~ AQ, data = haq_u2)
+
+cat("F 条件:\n")
+cat("  斜率:", coef(model_f)[2], "\n")
+cat("  Y 跨度:", abs(coef(model_f)[2]) * 25, "\n\n")
+
+cat("U1 条件:\n")
+cat("  斜率:", coef(model_u1)[2], "\n")
+cat("  Y 跨度:", abs(coef(model_u1)[2]) * 25, "\n\n")
+
+cat("U2 条件:\n")
+cat("  斜率:", coef(model_u2)[2], "\n")
+cat("  Y 跨度:", abs(coef(model_u2)[2]) * 25, "\n")
+```
+
+```{r}
+# 创建一个函数来为单个condition、group和order绘图
+plot_single <- function(data, group_name, cond, order_type, base_color) {
+  # 筛选特定order的数据
+  data_filtered <- data %>% filter(order == order_type)
+  
+  # 如果数据太少,返回NULL
+  if(nrow(data_filtered) < 3) {
+    warning(paste("Not enough data for", group_name, cond, order_type))
+    return(NULL)
+  }
+  
+  # 计算平均值
+  mean_aq <- mean(data_filtered$AQ, na.rm = TRUE)
+  mean_gaze <- mean(data_filtered$mean_left_gaze_time_s, na.rm = TRUE)
+  
+  # 计算相关系数和p值
+  cor_test <- cor.test(data_filtered$mean_left_gaze_time_s, data_filtered$AQ)
+  cor_value <- cor_test$estimate
+  p_value <- cor_test$p.value
+  
+  # 计算线性回归方程
+  lm_model <- lm(mean_left_gaze_time_s ~ AQ, data = data_filtered)
+  intercept <- coef(lm_model)[1]
+  slope <- coef(lm_model)[2]
+  
+  # 创建标签 - 包含回归方程、相关系数和p值
+  equation_text <- sprintf("y = %.4fx + %.4f", slope, intercept)
+  label_text <- sprintf("%s\nr = %.3f\np = %.3f", equation_text, cor_value, p_value)
+  
+  # 标签放在右下角
+  x_pos <- 22  # 靠近右侧
+  y_pos <- 0.15  # 底部位置
+  
+  # 为fu和uf设置不同颜色深浅
+  library(colorspace)
+  if(order_type == "fu") {
+    point_color <- darken(base_color, amount = 0.3)  # 深色给fu
+  } else {
+    point_color <- lighten(base_color, amount = 0.2)  # 浅色给uf
+  }
+  
+  # 绘图
+  p <- ggplot(data_filtered, aes(x = AQ, y = mean_left_gaze_time_s)) +
+    geom_point(alpha = 0.7, size = 3, color = point_color) +
+    geom_smooth(method = "lm", se = TRUE, alpha = 0.2, 
+                color = base_color, fill = base_color) +
+    # 添加平均值线
+    geom_hline(yintercept = mean_gaze, linetype = "dashed", 
+               color = "gray40", linewidth = 0.5, alpha = 0.7) +
+    annotate("text", x = x_pos, y = y_pos, label = label_text, 
+             hjust = 0, vjust = 1, size = 4, color = "black") +
+    xlim(5, 35) +  # 统一x轴范围
+    ylim(0, 0.75) +   # 统一y轴范围
+    theme_bw() +
+    labs(title = paste(group_name, "-", toupper(cond), "-", toupper(order_type)),
+         x = "AQ Score",
+         y = "Mean Left Gaze Time (s)") +
+    theme(plot.title = element_text(hjust = 0.5, face = "bold", size = 12),
+          axis.title = element_text(size = 11),
+          axis.text = element_text(size = 10))
+  
+  return(p)
+}
+```
+
+
+```{r}
+# 定义颜色
+colors <- c("f" = "#E41A1C", "u1" = "#377EB8", "u2" = "#4DAF4A")
+
+# 分组数据
+haq <- subset(aq_data, percent_group == "high")
+maq <- subset(aq_data, percent_group == "middle")
+laq <- subset(aq_data, percent_group == "low")
+
+# High Morph Group - 为每个condition的fu和uf分别绘图
+haq_f <- haq %>% filter(condition == "f")
+haq_u1 <- haq %>% filter(condition == "u1")
+haq_u2 <- haq %>% filter(condition == "u2")
+
+p1_fu <- plot_single(haq_f, "High Morph Group", "f", "fu", colors["f"])
+p1_uf <- plot_single(haq_f, "High Morph Group", "f", "uf", colors["f"])
+p2_fu <- plot_single(haq_u1, "High Morph Group", "u1", "fu", colors["u1"])
+p2_uf <- plot_single(haq_u1, "High Morph Group", "u1", "uf", colors["u1"])
+p3_fu <- plot_single(haq_u2, "High Morph Group", "u2", "fu", colors["u2"])
+p3_uf <- plot_single(haq_u2, "High Morph Group", "u2", "uf", colors["u2"])
+
+print(p1_fu)
+print(p1_uf)
+print(p2_fu)
+print(p2_uf)
+print(p3_fu)
+print(p3_uf)
+
+# Middle Morph Group
+maq_f <- maq %>% filter(condition == "f")
+maq_u1 <- maq %>% filter(condition == "u1")
+maq_u2 <- maq %>% filter(condition == "u2")
+
+p4_fu <- plot_single(maq_f, "Middle Morph Group", "f", "fu", colors["f"])
+p4_uf <- plot_single(maq_f, "Middle Morph Group", "f", "uf", colors["f"])
+p5_fu <- plot_single(maq_u1, "Middle Morph Group", "u1", "fu", colors["u1"])
+p5_uf <- plot_single(maq_u1, "Middle Morph Group", "u1", "uf", colors["u1"])
+p6_fu <- plot_single(maq_u2, "Middle Morph Group", "u2", "fu", colors["u2"])
+p6_uf <- plot_single(maq_u2, "Middle Morph Group", "u2", "uf", colors["u2"])
+
+print(p4_fu)
+print(p4_uf)
+print(p5_fu)
+print(p5_uf)
+print(p6_fu)
+print(p6_uf)
+
+# Low Morph Group
+laq_f <- laq %>% filter(condition == "f")
+laq_u1 <- laq %>% filter(condition == "u1")
+laq_u2 <- laq %>% filter(condition == "u2")
+
+p7_fu <- plot_single(laq_f, "Low Morph Group", "f", "fu", colors["f"])
+p7_uf <- plot_single(laq_f, "Low Morph Group", "f", "uf", colors["f"])
+p8_fu <- plot_single(laq_u1, "Low Morph Group", "u1", "fu", colors["u1"])
+p8_uf <- plot_single(laq_u1, "Low Morph Group", "u1", "uf", colors["u1"])
+p9_fu <- plot_single(laq_u2, "Low Morph Group", "u2", "fu", colors["u2"])
+p9_uf <- plot_single(laq_u2, "Low Morph Group", "u2", "uf", colors["u2"])
+
+print(p7_fu)
+print(p7_uf)
+print(p8_fu)
+print(p8_uf)
+print(p9_fu)
+print(p9_uf)
+```
+```{r}
+library(lme4)
+library(lmerTest)
+library(emmeans)
+library(dplyr)
+
+aq_data <- aq_data %>%
+  mutate(block = case_when(
+    # 当order为uf时
+    order == "uf" & condition == "u1" ~ 1,
+    order == "uf" & condition == "f"  ~ 2,
+    order == "uf" & condition == "u2" ~ 3,
+    
+    # 当order为fu时
+    order == "fu" & condition == "f"  ~ 1,
+    order == "fu" & condition == "u1" ~ 2,
+    order == "fu" & condition == "u2" ~ 3,
+    
+    # 如果有其他情况，返回NA
+    TRUE ~ NA_real_
+  ))
+
+model_full <- lmer(mean_left_gaze_time_s ~ 
+                     AQ * condition * order * percent_group*gender +
+                     (1 | ID),  # 被试随机截距
+                   data = aq_data,
+                   REML = TRUE)
+
+summary(model_full)
+
+model_full2 <- lmer(mean_left_gaze_time_s ~ 
+                     AQ * condition * order * percent_group*gender*block +
+                     (1 | ID),  # 被试随机截距
+                   data = aq_data,
+                   REML = TRUE)
+
+summary(model_full2)
+```
+
+```{r}
+library(ggplot2)
+library(dplyr)
+library(extrafont)
+library(ggh4x)
+
+# 全体AOIのデータ
+total_data <- data.frame(
+  order = c(
+    rep("uf", 9), rep("uf", 9),
+    rep("fu", 9), rep("fu", 9)
+  ),
+  gender = c(
+    rep("m", 9), rep("f", 9),
+    rep("m", 9), rep("f", 9)
+  ),
+  condition = rep(c("f", "f", "f", "u1", "u1", "u1", "u2", "u2", "u2"), 4),
+  percent_group = rep(c("high", "low", "middle"), 12),
+  mean_value = c(
+    0.6765, 0.5947, 0.7339, 0.7209, 0.6164, 0.8119, 0.6369, 0.5424, 0.6610,
+    0.7704, 0.5938, 0.7346, 0.7305, 0.5872, 0.7468, 0.7453, 0.5360, 0.6454,
+    0.7296, 0.6107, 0.8048, 0.6496, 0.5239, 0.6449, 0.5970, 0.4835, 0.5787,
+    0.7702, 0.6818, 0.9273, 0.7434, 0.5610, 0.7121, 0.7415, 0.5311, 0.6585
+  ),
+  cin_l = c(
+    0.6392, 0.5659, 0.6989, 0.6610, 0.5694, 0.7381, 0.5719, 0.5121, 0.6087,
+    0.7086, 0.5574, 0.6656, 0.6721, 0.5589, 0.6972, 0.6932, 0.4899, 0.6035,
+    0.6281, 0.5700, 0.7129, 0.5997, 0.4760, 0.6039, 0.5543, 0.4271, 0.5179,
+    0.7086, 0.6275, 0.8251, 0.6741, 0.5180, 0.6677, 0.6908, 0.4852, 0.6200
+  ),
+  cin_u = c(
+    0.7138, 0.6235, 0.7688, 0.7808, 0.6635, 0.8857, 0.7019, 0.5727, 0.7132,
+    0.8322, 0.6302, 0.8036, 0.7888, 0.6156, 0.7965, 0.7974, 0.5822, 0.6874,
+    0.8311, 0.6513, 0.8967, 0.6995, 0.5718, 0.6858, 0.6397, 0.5400, 0.6395,
+    0.8317, 0.7361, 1.0295, 0.8126, 0.6040, 0.7564, 0.7922, 0.5769, 0.6969
+  ),
+  aoi_type = "Total"
+)
+
+# 左視野AOIのデータ
+left_data <- data.frame(
+  order = c(
+    rep("uf", 9), rep("uf", 9),
+    rep("fu", 9), rep("fu", 9)
+  ),
+  gender = c(
+    rep("m", 9), rep("f", 9),
+    rep("m", 9), rep("f", 9)
+  ),
+  condition = rep(c("f", "f", "f", "u1", "u1", "u1", "u2", "u2", "u2"), 4),
+  percent_group = rep(c("high", "low", "middle"), 12),
+  mean_value = c(
+    0.3700, 0.3483, 0.4115, 0.4255, 0.3656, 0.4490, 0.3841, 0.3255, 0.3920,
+    0.3193, 0.2623, 0.3187, 0.2670, 0.2439, 0.2911, 0.3045, 0.2270, 0.2719,
+    0.3576, 0.2905, 0.3840, 0.3312, 0.2661, 0.3237, 0.2754, 0.2453, 0.2781,
+    0.3859, 0.3668, 0.4578, 0.3727, 0.3115, 0.3681, 0.3938, 0.3044, 0.3574
+  ),
+  cin_l = c(
+    0.3315, 0.3142, 0.3688, 0.3674, 0.3330, 0.3967, 0.3292, 0.2842, 0.3563,
+    0.2821, 0.2325, 0.2805, 0.2406, 0.2238, 0.2680, 0.2602, 0.1940, 0.2267,
+    0.2539, 0.2309, 0.3014, 0.2513, 0.2199, 0.2556, 0.2057, 0.1852, 0.2108,
+    0.3473, 0.3230, 0.4010, 0.3219, 0.2919, 0.3370, 0.3575, 0.2624, 0.3165
+  ),
+  cin_u = c(
+    0.4085, 0.3823, 0.4542, 0.4837, 0.3982, 0.5013, 0.4390, 0.3668, 0.4277,
+    0.3566, 0.2922, 0.3568, 0.2935, 0.2641, 0.3142, 0.3488, 0.2600, 0.3171,
+    0.4613, 0.3502, 0.4666, 0.4111, 0.3122, 0.3918, 0.3450, 0.3053, 0.3454,
+    0.4245, 0.4105, 0.5147, 0.4235, 0.3310, 0.3993, 0.4301, 0.3464, 0.3982
+  ),
+  aoi_type = "Left"
+)
+
+# データを結合
+plot_data <- rbind(total_data, left_data)
+
+plot_data$percent_group <- factor(plot_data$percent_group,
+                                   levels = c("low", "middle", "high"),
+                                   labels = c("Low", "Middle", "High"))
+
+plot_data$condition <- factor(plot_data$condition,
+                               levels = c("f", "u1", "u2"),
+                               labels = c("Friend", "Unknown1", "Unknown2"))
+
+plot_data$aoi_type <- factor(plot_data$aoi_type,
+                              levels = c("Total", "Left"))
+
+# ブラケット作成関数（Total AOI用）
+create_bracket_total <- function(order_val, gender_val, group_val, 
+                          cond1, cond2, y_base, height_offset) {
+  cond_map <- c("Friend" = 1, "Unknown1" = 2, "Unknown2" = 3)
+  x_pos <- which(c("Low", "Middle", "High") == group_val)
+  
+  data.frame(
+    order = order_val,
+    gender = gender_val,
+    percent_group = group_val,
+    x = x_pos + (cond_map[cond1] - 2) * 0.15,
+    xend = x_pos + (cond_map[cond2] - 2) * 0.15,
+    y = y_base + height_offset,
+    aoi_type = "Total",
+    stringsAsFactors = FALSE
+  )
+}
+
+# Total AOIの有意差（FU条件）
+# Female FU - Low組
+fu_f_low_1 <- create_bracket_total("fu", "f", "Low", "Friend", "Unknown1", 0.80, 0.05)
+fu_f_low_1$label <- "***"
+fu_f_low_2 <- create_bracket_total("fu", "f", "Low", "Unknown1", "Unknown2", 0.80, 0.12)
+fu_f_low_2$label <- "***"
+fu_f_low_3 <- create_bracket_total("fu", "f", "Low", "Friend", "Unknown2", 0.80, 0.19)
+fu_f_low_3$label <- "***"
+
+# Female FU - Middle組
+fu_f_mid_1 <- create_bracket_total("fu", "f", "Middle", "Friend", "Unknown1", 0.75, 0.05)
+fu_f_mid_1$label <- "***"
+fu_f_mid_2 <- create_bracket_total("fu", "f", "Middle", "Unknown1", "Unknown2", 0.75, 0.12)
+fu_f_mid_2$label <- "***"
+fu_f_mid_3 <- create_bracket_total("fu", "f", "Middle", "Friend", "Unknown2", 0.75, 0.19)
+fu_f_mid_3$label <- "***"
+
+# Male FU - Low組
+fu_m_low_1 <- create_bracket_total("fu", "m", "Low", "Friend", "Unknown1", 0.70, 0.05)
+fu_m_low_1$label <- "***"
+fu_m_low_2 <- create_bracket_total("fu", "m", "Low", "Unknown1", "Unknown2", 0.70, 0.12)
+fu_m_low_2$label <- "***"
+fu_m_low_3 <- create_bracket_total("fu", "m", "Low", "Friend", "Unknown2", 0.70, 0.19)
+fu_m_low_3$label <- "***"
+
+# Male FU - Middle組
+fu_m_mid_1 <- create_bracket_total("fu", "m", "Middle", "Friend", "Unknown1", 0.82, 0.05)
+fu_m_mid_1$label <- "***"
+fu_m_mid_2 <- create_bracket_total("fu", "m", "Middle", "Unknown1", "Unknown2", 0.82, 0.12)
+fu_m_mid_2$label <- "***"
+fu_m_mid_3 <- create_bracket_total("fu", "m", "Middle", "Friend", "Unknown2", 0.82, 0.19)
+fu_m_mid_3$label <- "***"
+
+# Total AOIの有意差（UF条件）
+# Female UF - Low組
+uf_f_low_1 <- create_bracket_total("uf", "f", "Low", "Friend", "Unknown2", 0.80, 0.05)
+uf_f_low_1$label <- "***"
+uf_f_low_2 <- create_bracket_total("uf", "f", "Low", "Unknown1", "Unknown2", 0.80, 0.12)
+uf_f_low_2$label <- "***"
+
+# Female UF - Middle組
+uf_f_mid_1 <- create_bracket_total("uf", "f", "Middle", "Friend", "Unknown2", 0.75, 0.05)
+uf_f_mid_1$label <- "***"
+uf_f_mid_2 <- create_bracket_total("uf", "f", "Middle", "Unknown1", "Unknown2", 0.75, 0.12)
+uf_f_mid_2$label <- "***"
+
+# Male UF - Low組
+uf_m_low_1 <- create_bracket_total("uf", "m", "Low", "Friend", "Unknown2", 0.82, 0.05)
+uf_m_low_1$label <- "***"
+uf_m_low_2 <- create_bracket_total("uf", "m", "Low", "Unknown1", "Unknown2", 0.82, 0.12)
+uf_m_low_2$label <- "***"
+
+# Male UF - Middle組
+uf_m_mid_1 <- create_bracket_total("uf", "m", "Middle", "Friend", "Unknown2", 0.89, 0.05)
+uf_m_mid_1$label <- "***"
+uf_m_mid_2 <- create_bracket_total("uf", "m", "Middle", "Unknown1", "Unknown2", 0.89, 0.12)
+uf_m_mid_2$label <- "***"
+
+# Total AOIのすべてのブラケットを結合
+sig_data_total <- rbind(
+  fu_f_low_1, fu_f_low_2, fu_f_low_3,
+  fu_f_mid_1, fu_f_mid_2, fu_f_mid_3,
+  fu_m_low_1, fu_m_low_2, fu_m_low_3,
+  fu_m_mid_1, fu_m_mid_2, fu_m_mid_3,
+  uf_f_low_1, uf_f_low_2,
+  uf_f_mid_1, uf_f_mid_2,
+  uf_m_low_1, uf_m_low_2,
+  uf_m_mid_1, uf_m_mid_2
+)
+
+# Left AOIの有意差（女性FU Friend条件のMiddle vs High）
+sig_data_left <- data.frame(
+  order = "fu",
+  gender = "f",
+  percent_group = "Middle",
+  x = 2,
+  xend = 3,
+  y = 0.54,
+  label = "***",
+  aoi_type = "Left",
+  stringsAsFactors = FALSE
+)
+
+# プロット作成
+p <- ggplot(plot_data, aes(x = percent_group, y = mean_value, 
+                           color = condition, group = interaction(condition, aoi_type),
+                           linetype = aoi_type)) +
+  geom_line(size = 1, position = position_dodge(width = 0.3)) +
+  geom_errorbar(aes(ymin = cin_l, ymax = cin_u), 
+                width = 0.3, size = 0.8,
+                position = position_dodge(width = 0.3)) +
+  geom_point(aes(shape = aoi_type), size = 2, position = position_dodge(width = 0.3)) +
+  # Total AOI用のブラケット（水平線）
+  geom_segment(data = sig_data_total,
+               aes(x = x, xend = xend, y = y, yend = y),
+               inherit.aes = FALSE,
+               color = "black",
+               size = 0.4) +
+  geom_segment(data = sig_data_total,
+               aes(x = x, xend = x, y = y - 0.015, yend = y),
+               inherit.aes = FALSE,
+               color = "black",
+               size = 0.4) +
+  geom_segment(data = sig_data_total,
+               aes(x = xend, xend = xend, y = y - 0.015, yend = y),
+               inherit.aes = FALSE,
+               color = "black",
+               size = 0.4) +
+  geom_text(data = sig_data_total,
+            aes(x = (x + xend) / 2, y = y + 0.02, label = label),
+            inherit.aes = FALSE,
+            size = 4,
+            family = "Arial") +
+  # Left AOI用のブラケット
+  geom_segment(data = sig_data_left,
+               aes(x = x, xend = xend, y = y, yend = y),
+               inherit.aes = FALSE,
+               color = "black",
+               size = 0.4) +
+  geom_segment(data = sig_data_left,
+               aes(x = x, xend = x, y = y - 0.012, yend = y),
+               inherit.aes = FALSE,
+               color = "black",
+               size = 0.4) +
+  geom_segment(data = sig_data_left,
+               aes(x = xend, xend = xend, y = y - 0.012, yend = y),
+               inherit.aes = FALSE,
+               color = "black",
+               size = 0.4) +
+  geom_text(data = sig_data_left,
+            aes(x = (x + xend) / 2, y = y + 0.025, label = label),
+            inherit.aes = FALSE,
+            size = 3.5,
+            family = "Arial") +
+  facet_grid2(order ~ gender,
+              labeller = labeller(gender = c(f = "Female", m = "Male"),
+                                 order = c(fu = "FU", uf = "UF")),
+              axes = "all",
+              remove_labels = "all") +
+  scale_color_manual(
+    values = c("Friend" = "#9370DB", 
+               "Unknown1" = "#FFA500", 
+               "Unknown2" = "#4169E1"),
+    name = "Condition"
+  ) +
+  scale_linetype_manual(
+    values = c("Total" = "solid", "Left" = "dashed"),
+    name = "AOI Type"
+  ) +
+  scale_shape_manual(
+    values = c("Total" = 16, "Left" = 17),
+    name = "AOI Type"
+  ) +
+  labs(x = "", y = "AOI Gaze Time (s)") +
+  scale_y_continuous(limits = c(0.15, 1.3), 
+                     breaks = seq(0.2, 1.2, 0.2)) +
+  theme_classic(base_family = "Arial") +
+  theme(
+    strip.background = element_blank(),
+    strip.text = element_text(size = 20, face = "bold", family = "Arial"),
+    axis.text = element_text(size = 15, family = "Arial"),
+    axis.title = element_text(size = 20, family = "Arial"),
+    legend.position = "bottom",
+    legend.title = element_text(size = 15, family = "Arial"),
+    legend.text = element_text(size = 12, family = "Arial"),
+    legend.box = "vertical",
+    panel.spacing = unit(1, "lines")
+  ) +
+  guides(
+    color = guide_legend(order = 1),
+    linetype = guide_legend(order = 2),
+    shape = guide_legend(order = 2)
+  )
+
+print(p)
+
+ggsave(
+  filename = "combined_total_left_with_all_sig.tiff",
+  plot = p,
+  width = 8,
+  height = 10,
+  units = "in",
+  dpi = 600
+)
+```
+```{r}
+library(ggplot2)
+library(dplyr)
+library(extrafont)
+library(ggh4x)
+
+# 全体AOIのデータ
+total_data <- data.frame(
+  order = c(
+    rep("uf", 9), rep("uf", 9),
+    rep("fu", 9), rep("fu", 9)
+  ),
+  gender = c(
+    rep("m", 9), rep("f", 9),
+    rep("m", 9), rep("f", 9)
+  ),
+  condition = rep(c("f", "f", "f", "u1", "u1", "u1", "u2", "u2", "u2"), 4),
+  percent_group = rep(c("high", "low", "middle"), 12),
+  mean_value = c(
+    0.6765, 0.5947, 0.7339, 0.7209, 0.6164, 0.8119, 0.6369, 0.5424, 0.6610,
+    0.7704, 0.5938, 0.7346, 0.7305, 0.5872, 0.7468, 0.7453, 0.5360, 0.6454,
+    0.7296, 0.6107, 0.8048, 0.6496, 0.5239, 0.6449, 0.5970, 0.4835, 0.5787,
+    0.7702, 0.6818, 0.9273, 0.7434, 0.5610, 0.7121, 0.7415, 0.5311, 0.6585
+  ),
+  cin_l = c(
+    0.6392, 0.5659, 0.6989, 0.6610, 0.5694, 0.7381, 0.5719, 0.5121, 0.6087,
+    0.7086, 0.5574, 0.6656, 0.6721, 0.5589, 0.6972, 0.6932, 0.4899, 0.6035,
+    0.6281, 0.5700, 0.7129, 0.5997, 0.4760, 0.6039, 0.5543, 0.4271, 0.5179,
+    0.7086, 0.6275, 0.8251, 0.6741, 0.5180, 0.6677, 0.6908, 0.4852, 0.6200
+  ),
+  cin_u = c(
+    0.7138, 0.6235, 0.7688, 0.7808, 0.6635, 0.8857, 0.7019, 0.5727, 0.7132,
+    0.8322, 0.6302, 0.8036, 0.7888, 0.6156, 0.7965, 0.7974, 0.5822, 0.6874,
+    0.8311, 0.6513, 0.8967, 0.6995, 0.5718, 0.6858, 0.6397, 0.5400, 0.6395,
+    0.8317, 0.7361, 1.0295, 0.8126, 0.6040, 0.7564, 0.7922, 0.5769, 0.6969
+  ),
+  aoi_type = "Total"
+)
+
+# 左視野AOIのデータ
+left_data <- data.frame(
+  order = c(
+    rep("uf", 9), rep("uf", 9),
+    rep("fu", 9), rep("fu", 9)
+  ),
+  gender = c(
+    rep("m", 9), rep("f", 9),
+    rep("m", 9), rep("f", 9)
+  ),
+  condition = rep(c("f", "f", "f", "u1", "u1", "u1", "u2", "u2", "u2"), 4),
+  percent_group = rep(c("high", "low", "middle"), 12),
+  mean_value = c(
+    0.3700, 0.3483, 0.4115, 0.4255, 0.3656, 0.4490, 0.3841, 0.3255, 0.3920,
+    0.3193, 0.2623, 0.3187, 0.2670, 0.2439, 0.2911, 0.3045, 0.2270, 0.2719,
+    0.3576, 0.2905, 0.3840, 0.3312, 0.2661, 0.3237, 0.2754, 0.2453, 0.2781,
+    0.3859, 0.3668, 0.4578, 0.3727, 0.3115, 0.3681, 0.3938, 0.3044, 0.3574
+  ),
+  cin_l = c(
+    0.3315, 0.3142, 0.3688, 0.3674, 0.3330, 0.3967, 0.3292, 0.2842, 0.3563,
+    0.2821, 0.2325, 0.2805, 0.2406, 0.2238, 0.2680, 0.2602, 0.1940, 0.2267,
+    0.2539, 0.2309, 0.3014, 0.2513, 0.2199, 0.2556, 0.2057, 0.1852, 0.2108,
+    0.3473, 0.3230, 0.4010, 0.3219, 0.2919, 0.3370, 0.3575, 0.2624, 0.3165
+  ),
+  cin_u = c(
+    0.4085, 0.3823, 0.4542, 0.4837, 0.3982, 0.5013, 0.4390, 0.3668, 0.4277,
+    0.3566, 0.2922, 0.3568, 0.2935, 0.2641, 0.3142, 0.3488, 0.2600, 0.3171,
+    0.4613, 0.3502, 0.4666, 0.4111, 0.3122, 0.3918, 0.3450, 0.3053, 0.3454,
+    0.4245, 0.4105, 0.5147, 0.4235, 0.3310, 0.3993, 0.4301, 0.3464, 0.3982
+  ),
+  aoi_type = "Left"
+)
+
+# データを結合
+plot_data <- rbind(total_data, left_data)
+
+plot_data$percent_group <- factor(plot_data$percent_group,
+                                   levels = c("low", "middle", "high"),
+                                   labels = c("Low", "Middle", "High"))
+
+plot_data$condition <- factor(plot_data$condition,
+                               levels = c("f", "u1", "u2"),
+                               labels = c("Friend", "Unknown1", "Unknown2"))
+
+plot_data$aoi_type <- factor(plot_data$aoi_type,
+                              levels = c("Total", "Left"))
+
+# ブラケット作成関数（Total AOI用）
+create_bracket_total <- function(order_val, gender_val, group_val, 
+                          cond1, cond2, y_base, height_offset) {
+  cond_map <- c("Friend" = 1, "Unknown1" = 2, "Unknown2" = 3)
+  x_pos <- which(c("Low", "Middle", "High") == group_val)
+  
+  data.frame(
+    order = order_val,
+    gender = gender_val,
+    percent_group = group_val,
+    x = x_pos + (cond_map[cond1] - 2) * 0.15,
+    xend = x_pos + (cond_map[cond2] - 2) * 0.15,
+    y = y_base + height_offset,
+    aoi_type = "Total",
+    stringsAsFactors = FALSE
+  )
+}
+
+# 各パネルの基準高度を設定（データの最大値に基づいて調整）
+# FU Female: 基準高度を0.85に
+fu_f_low_1 <- create_bracket_total("fu", "f", "Low", "Friend", "Unknown1", 0.92, 0.04)
+fu_f_low_1$label <- "***"
+fu_f_low_2 <- create_bracket_total("fu", "f", "Low", "Unknown1", "Unknown2", 0.92, 0.10)
+fu_f_low_2$label <- "***"
+fu_f_low_3 <- create_bracket_total("fu", "f", "Low", "Friend", "Unknown2",0.92, 0.16)
+fu_f_low_3$label <- "***"
+
+fu_f_mid_1 <- create_bracket_total("fu", "f", "Middle", "Friend", "Unknown1", 0.92, 0.04)
+fu_f_mid_1$label <- "***"
+fu_f_mid_2 <- create_bracket_total("fu", "f", "Middle", "Unknown1", "Unknown2", 0.92, 0.10)
+fu_f_mid_2$label <- "***"
+fu_f_mid_3 <- create_bracket_total("fu", "f", "Middle", "Friend", "Unknown2", 0.92, 0.16)
+fu_f_mid_3$label <- "***"
+
+# FU Male: 基準高度を0.88に
+fu_m_low_1 <- create_bracket_total("fu", "m", "Low", "Friend", "Unknown1", 0.88, 0.04)
+fu_m_low_1$label <- "***"
+fu_m_low_2 <- create_bracket_total("fu", "m", "Low", "Unknown1", "Unknown2", 0.88, 0.10)
+fu_m_low_2$label <- "***"
+fu_m_low_3 <- create_bracket_total("fu", "m", "Low", "Friend", "Unknown2", 0.88, 0.16)
+fu_m_low_3$label <- "***"
+
+fu_m_mid_1 <- create_bracket_total("fu", "m", "Middle", "Friend", "Unknown1", 0.88, 0.04)
+fu_m_mid_1$label <- "***"
+fu_m_mid_2 <- create_bracket_total("fu", "m", "Middle", "Unknown1", "Unknown2", 0.88, 0.10)
+fu_m_mid_2$label <- "***"
+fu_m_mid_3 <- create_bracket_total("fu", "m", "Middle", "Friend", "Unknown2", 0.88, 0.16)
+fu_m_mid_3$label <- "***"
+
+# UF Female: 基準高度を0.82に
+uf_f_low_1 <- create_bracket_total("uf", "f", "Low", "Friend", "Unknown2", 0.82, 0.04)
+uf_f_low_1$label <- "***"
+uf_f_low_2 <- create_bracket_total("uf", "f", "Low", "Unknown1", "Unknown2", 0.82, 0.10)
+uf_f_low_2$label <- "***"
+
+uf_f_mid_1 <- create_bracket_total("uf", "f", "Middle", "Friend", "Unknown2", 0.82, 0.04)
+uf_f_mid_1$label <- "***"
+uf_f_mid_2 <- create_bracket_total("uf", "f", "Middle", "Unknown1", "Unknown2", 0.82, 0.10)
+uf_f_mid_2$label <- "***"
+
+# UF Male: 基準高度を0.95に（データの最大値が高いため）
+uf_m_low_1 <- create_bracket_total("uf", "m", "Low", "Friend", "Unknown2", 0.95, 0.04)
+uf_m_low_1$label <- "***"
+uf_m_low_2 <- create_bracket_total("uf", "m", "Low", "Unknown1", "Unknown2", 0.95, 0.10)
+uf_m_low_2$label <- "***"
+
+uf_m_mid_1 <- create_bracket_total("uf", "m", "Middle", "Friend", "Unknown2", 0.95, 0.04)
+uf_m_mid_1$label <- "***"
+uf_m_mid_2 <- create_bracket_total("uf", "m", "Middle", "Unknown1", "Unknown2", 0.95, 0.10)
+uf_m_mid_2$label <- "***"
+
+# Total AOIのすべてのブラケットを結合
+sig_data_total <- rbind(
+  fu_f_low_1, fu_f_low_2, fu_f_low_3,
+  fu_f_mid_1, fu_f_mid_2, fu_f_mid_3,
+  fu_m_low_1, fu_m_low_2, fu_m_low_3,
+  fu_m_mid_1, fu_m_mid_2, fu_m_mid_3,
+  uf_f_low_1, uf_f_low_2,
+  uf_f_mid_1, uf_f_mid_2,
+  uf_m_low_1, uf_m_low_2,
+  uf_m_mid_1, uf_m_mid_2
+)
+
+# Left AOIの有意差（女性FU Friend条件のMiddle vs High）
+sig_data_left <- data.frame(
+  order = "fu",
+  gender = "f",
+  percent_group = "Middle",
+  x = 2,
+  xend = 3,
+  y = 0.50,  # 高度を調整
+  label = "***",
+  aoi_type = "Left",
+  stringsAsFactors = FALSE
+)
+
+# プロット作成
+p <- ggplot(plot_data, aes(x = percent_group, y = mean_value, 
+                           color = condition, group = interaction(condition, aoi_type),
+                           linetype = aoi_type)) +
+  geom_line(size = 1, position = position_dodge(width = 0.3)) +
+  geom_errorbar(aes(ymin = cin_l, ymax = cin_u), 
+                width = 0.3, size = 0.8,
+                position = position_dodge(width = 0.3)) +
+  geom_point(aes(shape = aoi_type), size = 2, position = position_dodge(width = 0.3)) +
+  # Total AOI用のブラケット（水平線）
+  geom_segment(data = sig_data_total,
+               aes(x = x, xend = xend, y = y, yend = y),
+               inherit.aes = FALSE,
+               color = "black",
+               size = 0.4) +
+  geom_segment(data = sig_data_total,
+               aes(x = x, xend = x, y = y - 0.012, yend = y),
+               inherit.aes = FALSE,
+               color = "black",
+               size = 0.4) +
+  geom_segment(data = sig_data_total,
+               aes(x = xend, xend = xend, y = y - 0.012, yend = y),
+               inherit.aes = FALSE,
+               color = "black",
+               size = 0.4) +
+  geom_text(data = sig_data_total,
+            aes(x = (x + xend) / 2, y = y + 0.018, label = label),
+            inherit.aes = FALSE,
+            size = 4,
+            family = "Arial") +
+  # Left AOI用のブラケット
+  geom_segment(data = sig_data_left,
+               aes(x = x, xend = xend, y = y, yend = y),
+               inherit.aes = FALSE,
+               color = "black",
+               size = 0.4) +
+  geom_segment(data = sig_data_left,
+               aes(x = x, xend = x, y = y - 0.010, yend = y),
+               inherit.aes = FALSE,
+               color = "black",
+               size = 0.4) +
+  geom_segment(data = sig_data_left,
+               aes(x = xend, xend = xend, y = y - 0.010, yend = y),
+               inherit.aes = FALSE,
+               color = "black",
+               size = 0.4) +
+  geom_text(data = sig_data_left,
+            aes(x = (x + xend) / 2, y = y + 0.020, label = label),
+            inherit.aes = FALSE,
+            size = 3.5,
+            family = "Arial") +
+  facet_grid2(order ~ gender,
+              labeller = labeller(gender = c(f = "Female", m = "Male"),
+                                 order = c(fu = "FU", uf = "UF")),
+              axes = "all",
+              remove_labels = "all") +
+  scale_color_manual(
+    values = c("Friend" = "#9370DB", 
+               "Unknown1" = "#FFA500", 
+               "Unknown2" = "#4169E1"),
+    name = "Condition"
+  ) +
+  scale_linetype_manual(
+    values = c("Total" = "solid", "Left" = "dashed"),
+    name = "AOI Type"
+  ) +
+  scale_shape_manual(
+    values = c("Total" = 16, "Left" = 17),
+    name = "AOI Type"
+  ) +
+  labs(x = "", y = "AOI Gaze Time (s)") +
+  scale_y_continuous(limits = c(0.15, 1.3), 
+                     breaks = seq(0.2, 1.2, 0.2)) +
+  theme_classic(base_family = "Arial") +
+  theme(
+    strip.background = element_blank(),
+    strip.text = element_text(size = 20, face = "bold", family = "Arial"),
+    axis.text = element_text(size = 15, family = "Arial"),
+    axis.title = element_text(size = 20, family = "Arial"),
+    legend.position = "bottom",
+    legend.title = element_text(size = 15, family = "Arial"),
+    legend.text = element_text(size = 12, family = "Arial"),
+    legend.box = "vertical",
+    panel.spacing = unit(1, "lines")
+  ) +
+  guides(
+    color = guide_legend(order = 1),
+    linetype = guide_legend(order = 2),
+    shape = guide_legend(order = 2)
+  )
+
+print(p)
+
+ggsave(
+  filename = "combined_total_left_with_all_sig_adjusted.tiff",
+  plot = p,
+  width = 8,
+  height = 10,
+  units = "in",
+  dpi = 600
+)
+```
+
+

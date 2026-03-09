@@ -69,4 +69,6 @@ summall.mを実行して，ProcessedData_Modified/all_subjects_combined_gaze.csv
 ProcessedData_Modifiedのkimeragaze .RmdとkimeraRT.Rmd
 R/kimera_bwd_20250524.Rmdは心理測定関数に関する分析コード
 
-実験1用分析コード：R/bunnseki_bwd_20250524.Rmd
+実験1用分析コード：
+ex1/left.Rmd
+R/bunnseki_bwd_20250524.Rmd
